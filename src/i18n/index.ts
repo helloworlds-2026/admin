@@ -71,6 +71,9 @@ const messages = {
         connectionId: '连接 ID',
         orderNo: '订单号搜索',
         orderNoPlaceholder: '输入订单号…',
+        upstreamOrderNo: '上游订单号',
+        upstreamOrderNoPlaceholder: '输入上游订单号…',
+        dateRange: '日期范围',
         search: '搜索',
       },
       actions: {
@@ -2228,6 +2231,9 @@ const messages = {
         connectionId: '連接 ID',
         orderNo: '訂單號搜尋',
         orderNoPlaceholder: '輸入訂單號…',
+        upstreamOrderNo: '上游訂單號',
+        upstreamOrderNoPlaceholder: '輸入上游訂單號…',
+        dateRange: '日期範圍',
         search: '搜尋',
       },
       actions: {
@@ -4385,6 +4391,9 @@ const messages = {
         connectionId: 'Connection ID',
         orderNo: 'Order No',
         orderNoPlaceholder: 'Enter order no…',
+        upstreamOrderNo: 'Upstream Order No',
+        upstreamOrderNoPlaceholder: 'Enter upstream order no…',
+        dateRange: 'Date Range',
         search: 'Search',
       },
       actions: {

@@ -27,6 +27,9 @@ const filters = reactive({
   status: '__all__',
   connection_id: '__all__',
   order_no: '',
+  upstream_order_no: '',
+  created_from: '',
+  created_to: '',
 })
 
 const showDetail = ref(false)
@@ -73,6 +76,9 @@ const fetchOrders = async (page = 1) => {
     if (filters.status && filters.status !== '__all__') params.status = filters.status
     if (filters.connection_id && filters.connection_id !== '__all__') params.connection_id = filters.connection_id
     if (filters.order_no) params.order_no = filters.order_no
+    if (filters.upstream_order_no) params.upstream_order_no = filters.upstream_order_no
+    if (filters.created_from) params.created_from = filters.created_from
+    if (filters.created_to) params.created_to = filters.created_to
 
     const res = await adminAPI.getProcurementOrders(params)
     orders.value = (res.data.data as any[]) || []
@@ -309,7 +315,19 @@ onMounted(() => {
       </div>
       <div>
         <label class="mb-1.5 block text-xs font-medium text-muted-foreground">{{ t('procurement.filters.orderNo') }}</label>
-        <Input v-model="filters.order_no" class="h-9 w-48" :placeholder="t('procurement.filters.orderNoPlaceholder')" @keyup.enter="handleSearch" />
+        <Input v-model="filters.order_no" class="h-9 w-44" :placeholder="t('procurement.filters.orderNoPlaceholder')" @keyup.enter="handleSearch" />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-xs font-medium text-muted-foreground">{{ t('procurement.filters.upstreamOrderNo') }}</label>
+        <Input v-model="filters.upstream_order_no" class="h-9 w-44" :placeholder="t('procurement.filters.upstreamOrderNoPlaceholder')" @keyup.enter="handleSearch" />
+      </div>
+      <div>
+        <label class="mb-1.5 block text-xs font-medium text-muted-foreground">{{ t('procurement.filters.dateRange') }}</label>
+        <div class="flex items-center gap-1.5">
+          <Input v-model="filters.created_from" type="date" class="h-9 w-36" @change="handleSearch" />
+          <span class="text-xs text-muted-foreground">—</span>
+          <Input v-model="filters.created_to" type="date" class="h-9 w-36" @change="handleSearch" />
+        </div>
       </div>
       <Button size="sm" class="h-9" @click="handleSearch">{{ t('procurement.filters.search') }}</Button>
     </div>
