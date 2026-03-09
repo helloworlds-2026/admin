@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import { Input } from '@/components/ui/input'
@@ -110,6 +110,10 @@ const syncFromProps = () => {
 }
 
 syncFromProps()
+
+watch(() => props.data, () => {
+  syncFromProps()
+}, { deep: true })
 
 const splitRecipients = (raw: string) => {
   return raw

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import { Button } from '@/components/ui/button'
@@ -76,6 +76,10 @@ const syncFromProps = () => {
 }
 
 syncFromProps()
+
+watch(() => props.data, () => {
+  syncFromProps()
+}, { deep: true })
 
 const notifyErrorIfNeeded = (err: unknown, fallback: string) => {
   const known = err as Error & { __notified?: boolean }
