@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useDebounceFn } from '@vueuse/core'
 import { adminAPI } from '@/api/admin'
 import type { AdminProduct, AdminProductSKU, AdminCardSecret, AdminCardSecretBatch } from '@/api/types'
+import { KeyRound, Upload, Search, PackagePlus } from 'lucide-vue-next'
 import IdCell from '@/components/IdCell.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,6 +58,11 @@ const batchActionSuccess = ref('')
 
 const showEditModal = ref(false)
 const editingCardSecret = ref<AdminCardSecret | null>(null)
+const importSectionRef = ref<HTMLElement | null>(null)
+
+const scrollToImport = () => {
+  importSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 const normalizeFilterValue = (value: string) => (value === '__all__' ? '' : value)
 
@@ -591,6 +597,37 @@ onMounted(async () => {
   <div class="space-y-6">
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-semibold">{{ t('admin.cardSecrets.title') }}</h1>
+      <Button v-if="currentProductId" @click="scrollToImport">
+        <Upload class="mr-2 h-4 w-4" />
+        {{ t('admin.cardSecrets.importAction') }}
+      </Button>
+    </div>
+
+    <!-- Guide: shown when no product is selected -->
+    <div v-if="!currentProductId" class="rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 p-8">
+      <div class="mx-auto max-w-lg text-center space-y-4">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <PackagePlus class="h-8 w-8 text-primary" />
+        </div>
+        <h2 class="text-xl font-semibold text-foreground">{{ t('admin.cardSecrets.guide.title') }}</h2>
+        <p class="text-sm text-muted-foreground">{{ t('admin.cardSecrets.guide.description') }}</p>
+        <div class="flex items-start gap-6 justify-center text-left pt-2">
+          <div class="flex items-start gap-3">
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</div>
+            <div>
+              <p class="text-sm font-medium text-foreground">{{ t('admin.cardSecrets.guide.step1Title') }}</p>
+              <p class="text-xs text-muted-foreground">{{ t('admin.cardSecrets.guide.step1Desc') }}</p>
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">2</div>
+            <div>
+              <p class="text-sm font-medium text-foreground">{{ t('admin.cardSecrets.guide.step2Title') }}</p>
+              <p class="text-xs text-muted-foreground">{{ t('admin.cardSecrets.guide.step2Desc') }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -667,12 +704,14 @@ onMounted(async () => {
       </div>
     </div>
 
-    <CardSecretBatchCreateModal
-      :model-value="!!currentProductId"
-      :product-id="currentProductId || 0"
-      :sku-id="currentSkuId"
-      @success="handleBatchCreateSuccess"
-    />
+    <div ref="importSectionRef">
+      <CardSecretBatchCreateModal
+        :model-value="!!currentProductId"
+        :product-id="currentProductId || 0"
+        :sku-id="currentSkuId"
+        @success="handleBatchCreateSuccess"
+      />
+    </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="rounded-xl border border-border bg-card p-6">

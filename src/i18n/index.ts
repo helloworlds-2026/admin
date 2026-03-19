@@ -1302,6 +1302,15 @@ const messages = {
       },
       cardSecrets: {
         title: '卡密库存',
+        importAction: '导入卡密',
+        guide: {
+          title: '导入卡密到库存',
+          description: '请先选择一个自动交付商品，然后即可批量录入或 CSV 导入卡密。',
+          step1Title: '选择商品',
+          step1Desc: '在上方搜索并选择一个自动交付商品',
+          step2Title: '录入/导入',
+          step2Desc: '手动批量录入或上传 CSV 文件导入',
+        },
         productHintEmpty: '未选择商品，默认展示全部卡密',
         productHintCurrent: '当前商品ID：{id}',
         productNameLabel: '商品名称',
@@ -3862,6 +3871,15 @@ const messages = {
       },
       cardSecrets: {
         title: '卡密庫存',
+        importAction: '導入卡密',
+        guide: {
+          title: '導入卡密到庫存',
+          description: '請先選擇一個自動交付商品，然後即可批量錄入或 CSV 導入卡密。',
+          step1Title: '選擇商品',
+          step1Desc: '在上方搜尋並選擇一個自動交付商品',
+          step2Title: '錄入/導入',
+          step2Desc: '手動批量錄入或上傳 CSV 檔案導入',
+        },
         productHintEmpty: '未選擇商品，預設顯示全部卡密',
         productHintCurrent: '當前商品ID：{id}',
         productNameLabel: '商品名稱',
@@ -6422,6 +6440,15 @@ const messages = {
       },
       cardSecrets: {
         title: 'Card Secrets',
+        importAction: 'Import Secrets',
+        guide: {
+          title: 'Import Secrets to Inventory',
+          description: 'Select an auto-fulfillment product first, then you can batch enter or CSV import card secrets.',
+          step1Title: 'Select Product',
+          step1Desc: 'Search and select an auto-fulfillment product above',
+          step2Title: 'Enter/Import',
+          step2Desc: 'Batch enter manually or upload a CSV file',
+        },
         productHintEmpty: 'No product selected, showing all secrets',
         productHintCurrent: 'Current product ID: {id}',
         productNameLabel: 'Product',
