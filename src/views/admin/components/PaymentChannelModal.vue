@@ -117,6 +117,7 @@ const okpayConfig = reactive({
   gateway_url: 'https://api.okaypay.me/shop',
   merchant_id: '',
   merchant_token: '',
+  exchange_rate: '1',
   return_url: '',
   callback_url: '',
   display_name: '',
@@ -306,6 +307,7 @@ const resetOkpayConfig = () => {
   okpayConfig.gateway_url = 'https://api.okaypay.me/shop'
   okpayConfig.merchant_id = ''
   okpayConfig.merchant_token = ''
+  okpayConfig.exchange_rate = '1'
   okpayConfig.return_url = 'https://yourdomain.com/pay'
   okpayConfig.callback_url = 'https://api.yourdomain.com/api/v1/payments/callback'
   okpayConfig.display_name = ''
@@ -407,6 +409,7 @@ const applyOkpayConfig = (raw: Record<string, unknown>) => {
   okpayConfig.gateway_url = String(raw.gateway_url || 'https://api.okaypay.me/shop')
   okpayConfig.merchant_id = String(raw.merchant_id || '')
   okpayConfig.merchant_token = String(raw.merchant_token || '')
+  okpayConfig.exchange_rate = String(raw.exchange_rate || '1')
   okpayConfig.return_url = String(raw.return_url || '')
   okpayConfig.callback_url = String(raw.callback_url || '')
   okpayConfig.display_name = String(raw.display_name || '')
@@ -575,6 +578,7 @@ const buildOkpayConfig = () => {
   setIfNotEmpty('gateway_url', okpayConfig.gateway_url)
   setIfNotEmpty('merchant_id', okpayConfig.merchant_id)
   setIfNotEmpty('merchant_token', okpayConfig.merchant_token)
+  setIfNotEmpty('exchange_rate', okpayConfig.exchange_rate)
   setIfNotEmpty('return_url', okpayConfig.return_url)
   setIfNotEmpty('callback_url', okpayConfig.callback_url)
   setIfNotEmpty('display_name', okpayConfig.display_name)
@@ -1145,6 +1149,10 @@ const closeModal = () => {
             <div class="min-w-0">
               <label class="block text-xs font-medium text-muted-foreground mb-1.5">{{ t('admin.paymentChannels.modal.okpayMerchantToken') }}</label>
               <Input v-model="okpayConfig.merchant_token" :placeholder="t('admin.paymentChannels.modal.okpayMerchantTokenPlaceholder')" />
+            </div>
+            <div class="min-w-0">
+              <label class="block text-xs font-medium text-muted-foreground mb-1.5">{{ t('admin.paymentChannels.modal.okpayExchangeRate') }}</label>
+              <Input v-model="okpayConfig.exchange_rate" type="number" step="0.00000001" min="0.00000001" :placeholder="t('admin.paymentChannels.modal.okpayExchangeRatePlaceholder')" />
             </div>
             <div class="min-w-0">
               <label class="block text-xs font-medium text-muted-foreground mb-1.5">{{ t('admin.paymentChannels.modal.okpayCallbackUrl') }}</label>
