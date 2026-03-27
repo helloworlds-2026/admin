@@ -608,6 +608,8 @@ const messages = {
           activeProducts: '上架商品',
           lowStockProducts: '低库存商品',
           outOfStockProducts: '售罄商品',
+          outOfStockSKUs: '售罄 SKU',
+          lowStockSKUs: '低库存 SKU',
           autoAvailableSecrets: '自动交付可用卡密',
           manualAvailableUnits: '人工交付可售库存',
           paymentsSuccess: '成功支付笔数',
@@ -654,6 +656,11 @@ const messages = {
           pending_payment_orders: '待支付订单数',
           payments_failed: '失败支付笔数',
         },
+        inventoryAlerts: {
+          title: '库存异常明细',
+          outOfStock: '售罄',
+          lowStock: '低库存',
+        },
         quickActions: {
           title: '快捷入口',
         },
@@ -689,6 +696,7 @@ const messages = {
         table: {
           id: 'ID',
           orderNo: '订单号',
+          items: '商品信息',
           user: '用户',
           ip: '客户端IP',
           amount: '金额',
@@ -3360,6 +3368,8 @@ const messages = {
           activeProducts: '上架商品',
           lowStockProducts: '低庫存商品',
           outOfStockProducts: '售罄商品',
+          outOfStockSKUs: '售罄 SKU',
+          lowStockSKUs: '低庫存 SKU',
           autoAvailableSecrets: '自動交付可用卡密',
           manualAvailableUnits: '人工交付可售庫存',
           paymentsSuccess: '成功支付筆數',
@@ -3406,6 +3416,11 @@ const messages = {
           pending_payment_orders: '待支付訂單數',
           payments_failed: '失敗支付筆數',
         },
+        inventoryAlerts: {
+          title: '庫存異常明細',
+          outOfStock: '售罄',
+          lowStock: '低庫存',
+        },
         quickActions: {
           title: '快捷入口',
         },
@@ -3441,6 +3456,7 @@ const messages = {
         table: {
           id: 'ID',
           orderNo: '訂單號',
+          items: '商品資訊',
           user: '用戶',
           ip: '用戶IP',
           amount: '金額',
@@ -6112,6 +6128,8 @@ const messages = {
           activeProducts: 'Active Products',
           lowStockProducts: 'Low Stock Products',
           outOfStockProducts: 'Out of Stock Products',
+          outOfStockSKUs: 'Out of Stock SKUs',
+          lowStockSKUs: 'Low Stock SKUs',
           autoAvailableSecrets: 'Auto Fulfillment Available Secrets',
           manualAvailableUnits: 'Manual Fulfillment Available Units',
           paymentsSuccess: 'Successful Payments',
@@ -6158,6 +6176,11 @@ const messages = {
           pending_payment_orders: 'Pending payment orders',
           payments_failed: 'Failed payments',
         },
+        inventoryAlerts: {
+          title: 'Inventory Alerts',
+          outOfStock: 'Out of stock',
+          lowStock: 'Low stock',
+        },
         quickActions: {
           title: 'Quick Actions',
         },
@@ -6193,6 +6216,7 @@ const messages = {
         table: {
           id: 'ID',
           orderNo: 'Order No',
+          items: 'Items',
           user: 'User',
           ip: 'IP',
           amount: 'Amount',

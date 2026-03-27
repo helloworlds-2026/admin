@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { formatMoney } from '@/utils/format'
+import { formatMoney, getLocalizedText } from '@/utils/format'
+import type { AdminDashboardInventoryAlert } from '@/api/types'
 import DashboardAd from '@/components/admin/DashboardAd.vue'
 
 interface DashboardAlertItem {
@@ -46,6 +47,8 @@ interface DashboardOverview {
     active_products: number
     out_of_stock_products: number
     low_stock_products: number
+    out_of_stock_skus: number
+    low_stock_skus: number
     auto_available_secrets: number
     manual_available_units: number
   }
@@ -103,10 +106,12 @@ const { t } = useI18n()
 const loadingOverview = ref(false)
 const loadingTrends = ref(false)
 const loadingRankings = ref(false)
+const loadingInventoryAlerts = ref(false)
 const dashboardError = ref('')
 const overview = ref<DashboardOverview | null>(null)
 const trends = ref<DashboardTrends | null>(null)
 const rankings = ref<DashboardRankings | null>(null)
+const inventoryAlerts = ref<AdminDashboardInventoryAlert[]>([])
 
 const filters = reactive({
   range: '7d',
@@ -251,10 +256,22 @@ const loadRankings = async (forceRefresh = false) => {
   }
 }
 
+const loadInventoryAlerts = async () => {
+  loadingInventoryAlerts.value = true
+  try {
+    const response = await adminAPI.getDashboardInventoryAlerts()
+    inventoryAlerts.value = (response.data.data as unknown as AdminDashboardInventoryAlert[]) || []
+  } catch {
+    inventoryAlerts.value = []
+  } finally {
+    loadingInventoryAlerts.value = false
+  }
+}
+
 const loadDashboard = async (forceRefresh = false) => {
   dashboardError.value = ''
   try {
-    await Promise.all([loadOverview(forceRefresh), loadTrends(forceRefresh), loadRankings(forceRefresh)])
+    await Promise.all([loadOverview(forceRefresh), loadTrends(forceRefresh), loadRankings(forceRefresh), loadInventoryAlerts()])
   } catch (error: any) {
     dashboardError.value = error?.message || t('admin.dashboard.errors.fetchFailed')
   }
@@ -297,6 +314,23 @@ const alertLabel = (type: string) => {
   const key = `admin.dashboard.alertTypes.${type}`
   const translated = t(key)
   return translated === key ? type : translated
+}
+
+const inventoryAlertLabel = (item: AdminDashboardInventoryAlert) => {
+  return item.alert_type === 'out_of_stock_products'
+    ? t('admin.dashboard.inventoryAlerts.outOfStock')
+    : t('admin.dashboard.inventoryAlerts.lowStock')
+}
+
+const inventoryAlertBadgeClass = (item: AdminDashboardInventoryAlert) => {
+  return item.alert_type === 'out_of_stock_products'
+    ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+    : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+}
+
+const skuSpecLabel = (item: AdminDashboardInventoryAlert) => {
+  if (!item.sku_spec_values || Object.keys(item.sku_spec_values).length === 0) return ''
+  return Object.values(item.sku_spec_values).join(' / ')
 }
 
 const quickActions = computed(() => [
@@ -415,6 +449,7 @@ onMounted(() => {
         <CardContent>
           <div class="text-2xl font-semibold">{{ overview?.kpi.low_stock_products ?? 0 }}</div>
           <div class="mt-1 text-xs text-muted-foreground">{{ t('admin.dashboard.kpi.outOfStockProducts') }}: {{ overview?.kpi.out_of_stock_products ?? 0 }}</div>
+          <div class="mt-1 text-xs text-muted-foreground">{{ t('admin.dashboard.kpi.outOfStockSKUs') }}: {{ overview?.kpi.out_of_stock_skus ?? 0 }} / {{ t('admin.dashboard.kpi.lowStockSKUs') }}: {{ overview?.kpi.low_stock_skus ?? 0 }}</div>
         </CardContent>
       </Card>
 
@@ -594,10 +629,10 @@ onMounted(() => {
           <CardTitle class="text-sm">{{ t('admin.dashboard.alerts.title') }}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div v-if="!overview || overview.alerts.length === 0" class="text-sm text-muted-foreground">{{ t('admin.dashboard.alerts.empty') }}</div>
-          <div v-else class="space-y-2">
+          <!-- 通用告警（待支付订单、失败支付等） -->
+          <div v-if="overview && overview.alerts.filter(a => a.type !== 'out_of_stock_products' && a.type !== 'low_stock_products').length > 0" class="space-y-2 mb-3">
             <div
-              v-for="alert in overview.alerts"
+              v-for="alert in overview.alerts.filter(a => a.type !== 'out_of_stock_products' && a.type !== 'low_stock_products')"
               :key="`${alert.type}-${alert.value}`"
               class="rounded-lg border px-3 py-2 text-sm"
               :class="alertClass(alert.level)"
@@ -607,6 +642,36 @@ onMounted(() => {
                 <span class="font-mono text-xs">{{ alert.value }}</span>
               </div>
             </div>
+          </div>
+          <!-- SKU 级别库存告警 -->
+          <div v-if="inventoryAlerts.length > 0" class="space-y-2">
+            <div class="text-xs font-medium text-muted-foreground mb-1">{{ t('admin.dashboard.inventoryAlerts.title') }}</div>
+            <div
+              v-for="(item, idx) in inventoryAlerts"
+              :key="`inv-${item.product_id}-${item.sku_id || 0}-${idx}`"
+              class="rounded-lg border border-border px-3 py-2 text-sm"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <router-link :to="{ path: '/products', query: { product_id: item.product_id } }" class="font-medium text-primary underline-offset-4 hover:underline break-words">
+                    {{ getLocalizedText(item.product_title) }}
+                  </router-link>
+                  <div v-if="skuSpecLabel(item)" class="text-xs text-muted-foreground mt-0.5">
+                    SKU: {{ skuSpecLabel(item) }}
+                    <span v-if="item.sku_code" class="ml-1">({{ item.sku_code }})</span>
+                  </div>
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                  <span class="font-mono text-xs text-muted-foreground">{{ item.available_stock }}</span>
+                  <span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium" :class="inventoryAlertBadgeClass(item)">
+                    {{ inventoryAlertLabel(item) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="(!overview || overview.alerts.length === 0) && inventoryAlerts.length === 0" class="text-sm text-muted-foreground">
+            {{ t('admin.dashboard.alerts.empty') }}
           </div>
         </CardContent>
       </Card>

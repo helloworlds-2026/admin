@@ -612,6 +612,17 @@ export interface AdminDashboardRanking {
   total_revenue: number
 }
 
+export interface AdminDashboardInventoryAlert {
+  product_id: number
+  sku_id?: number
+  product_title: Record<string, string>
+  sku_code?: string
+  sku_spec_values?: Record<string, string>
+  fulfillment_type: string
+  alert_type: string
+  available_stock: number
+}
+
 // --- Ad Proxy ---
 export interface AdRenderSlotDTO {
   code: string
