@@ -805,37 +805,6 @@ watch(currentTab, (newTab) => {
             <div>
               <label for="registration-enabled" class="text-sm font-medium">{{ t('admin.settings.registration.registrationEnabled') }}</label>
               <p class="text-xs text-muted-foreground">{{ t('admin.settings.registration.registrationEnabledDesc') }}</p>
-              <!-- Access Control Tab -->
-              <div v-show="currentTab === 'access'" class="space-y-6">
-                <div class="rounded-xl border border-border bg-card">
-                  <div class="border-b border-border bg-muted/40 px-6 py-4">
-                    <h2 class="text-lg font-semibold">{{ t('admin.settings.access.title') }}</h2>
-                    <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.access.subtitle') }}</p>
-                  </div>
-
-                  <div class="space-y-6 p-6">
-                    <!-- Require Login Toggle -->
-                    <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
-                      <input id="require-login" v-model="accessForm.require_login" type="checkbox" class="h-4 w-4 accent-primary" />
-                      <div class="flex-1">
-                        <label for="require-login" class="text-sm font-medium block">{{ t('admin.settings.access.requireLogin') }}</label>
-                        <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.access.requireLoginHint') }}</p>
-                      </div>
-                    </div>
-
-                    <!-- Guest Orders Toggle -->
-                    <div class="flex flex-col gap-3 rounded-lg border" :class="accessForm.require_login ? 'border-muted-foreground/20 bg-muted/10 opacity-50 cursor-not-allowed' : 'border-border bg-muted/20'">
-                      <div class="px-4 py-3 sm:flex sm:items-center">
-                        <input id="enable-guest-orders" v-model="accessForm.enable_guest_orders" type="checkbox" class="h-4 w-4 accent-primary" :disabled="accessForm.require_login" />
-                        <div class="flex-1 ml-3">
-                          <label for="enable-guest-orders" class="text-sm font-medium block" :class="accessForm.require_login ? 'text-muted-foreground' : ''">{{ t('admin.settings.access.enableGuestOrders') }}</label>
-                          <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.access.enableGuestOrdersHint') }}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
           <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
@@ -997,6 +966,35 @@ watch(currentTab, (newTab) => {
             <div class="space-y-2">
               <label class="text-xs font-medium text-muted-foreground">{{ t('admin.settings.scripts.code') }}</label>
               <Textarea v-model="script.code" rows="7" class="font-mono text-xs" :placeholder="t('admin.settings.scripts.codePlaceholder')" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-show="currentTab === 'access'" class="space-y-6">
+      <div class="rounded-xl border border-border bg-card">
+        <div class="border-b border-border bg-muted/40 px-6 py-4">
+          <h2 class="text-lg font-semibold">{{ t('admin.settings.access.title') }}</h2>
+          <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.access.subtitle') }}</p>
+        </div>
+
+        <div class="space-y-6 p-6">
+          <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
+            <input id="require-login" v-model="accessForm.require_login" type="checkbox" class="h-4 w-4 accent-primary" />
+            <div class="flex-1">
+              <label for="require-login" class="text-sm font-medium block">{{ t('admin.settings.access.requireLogin') }}</label>
+              <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.access.requireLoginHint') }}</p>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3 rounded-lg border" :class="accessForm.require_login ? 'border-muted-foreground/20 bg-muted/10 opacity-50 cursor-not-allowed' : 'border-border bg-muted/20'">
+            <div class="px-4 py-3 sm:flex sm:items-center">
+              <input id="enable-guest-orders" v-model="accessForm.enable_guest_orders" type="checkbox" class="h-4 w-4 accent-primary" :disabled="accessForm.require_login" />
+              <div class="flex-1 ml-3">
+                <label for="enable-guest-orders" class="text-sm font-medium block" :class="accessForm.require_login ? 'text-muted-foreground' : ''">{{ t('admin.settings.access.enableGuestOrders') }}</label>
+                <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.access.enableGuestOrdersHint') }}</p>
+              </div>
             </div>
           </div>
         </div>
