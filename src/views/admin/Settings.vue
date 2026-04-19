@@ -57,6 +57,7 @@ const tabs = computed(() => [
   { label: t('admin.settings.tabs.basic'), value: 'basic' },
   { label: t('admin.settings.tabs.template'), value: 'template' },
   { label: t('admin.settings.tabs.navigation'), value: 'navigation' },
+  { label: t('admin.settings.tabs.access'), value: 'access' },
   { label: t('admin.settings.tabs.about'), value: 'about' },
   { label: t('admin.settings.tabs.legal'), value: 'legal' },
   { label: t('admin.settings.tabs.smtp'), value: 'smtp' },
@@ -285,6 +286,11 @@ const dashboardForm = reactive({
   },
 })
 
+const accessForm = reactive({
+  require_login: true,
+  enable_guest_orders: false,
+})
+
 const walletForm = reactive({
   recharge_channel_ids: [] as number[],
   wallet_only_payment: false,
@@ -367,13 +373,14 @@ const notifyErrorIfNeeded = (err: unknown, fallback: string) => {
 const fetchSettings = async () => {
   loading.value = true
   try {
-    const [siteRes, smtpRes, captchaRes, telegramRes, dashboardRes, registrationRes, orderEmailTmplRes] = await Promise.all([
+    const [siteRes, smtpRes, captchaRes, telegramRes, dashboardRes, registrationRes, accessRes, orderEmailTmplRes] = await Promise.all([
       adminAPI.getSettings({ key: 'site_config' }),
       adminAPI.getSMTPSettings(),
       adminAPI.getCaptchaSettings(),
       adminAPI.getTelegramAuthSettings(),
       adminAPI.getSettings({ key: 'dashboard_config' }),
       adminAPI.getSettings({ key: 'registration_config' }),
+        adminAPI.getSettings({ key: 'access_config' }),
       adminAPI.getOrderEmailTemplateSettings(),
     ])
 
@@ -528,6 +535,11 @@ const fetchSettings = async () => {
     }
 
     if (orderEmailTmplRes.data && orderEmailTmplRes.data.data) {
+      if (accessRes.data && accessRes.data.data) {
+        const accessData = accessRes.data.data as Record<string, unknown>
+        accessForm.require_login = accessData.require_login !== false
+        accessForm.enable_guest_orders = !!accessData.enable_guest_orders
+      }
       const tmplData = orderEmailTmplRes.data.data as Record<string, unknown>
       const templates = tmplData.templates as Record<string, unknown> | undefined
       if (templates) {
@@ -682,6 +694,16 @@ const saveDashboardSettings = async () => {
   await adminAPI.updateSettings(payload)
 }
 
+const saveAccessSettings = async () => {
+  const payload = {
+    key: 'access_config',
+    value: {
+      require_login: accessForm.require_login,
+      enable_guest_orders: accessForm.enable_guest_orders,
+    },
+  }
+  await adminAPI.updateSettings(payload)
+}
 const saveSettings = async () => {
   if (currentTab.value === 'smtp') {
     await smtpTabRef.value?.save()
@@ -706,6 +728,9 @@ const saveSettings = async () => {
       await saveSiteUserSettings()
     } else if (currentTab.value === 'dashboard') {
       await saveDashboardSettings()
+    } else {
+    } else if (currentTab.value === 'access') {
+      await saveAccessSettings()
     } else {
       await saveRegistrationSettings()
       await saveSiteSettings()
@@ -780,6 +805,37 @@ watch(currentTab, (newTab) => {
             <div>
               <label for="registration-enabled" class="text-sm font-medium">{{ t('admin.settings.registration.registrationEnabled') }}</label>
               <p class="text-xs text-muted-foreground">{{ t('admin.settings.registration.registrationEnabledDesc') }}</p>
+              <!-- Access Control Tab -->
+              <div v-show="currentTab === 'access'" class="space-y-6">
+                <div class="rounded-xl border border-border bg-card">
+                  <div class="border-b border-border bg-muted/40 px-6 py-4">
+                    <h2 class="text-lg font-semibold">{{ t('admin.settings.access.title') }}</h2>
+                    <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.access.subtitle') }}</p>
+                  </div>
+
+                  <div class="space-y-6 p-6">
+                    <!-- Require Login Toggle -->
+                    <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
+                      <input id="require-login" v-model="accessForm.require_login" type="checkbox" class="h-4 w-4 accent-primary" />
+                      <div class="flex-1">
+                        <label for="require-login" class="text-sm font-medium block">{{ t('admin.settings.access.requireLogin') }}</label>
+                        <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.access.requireLoginHint') }}</p>
+                      </div>
+                    </div>
+
+                    <!-- Guest Orders Toggle -->
+                    <div class="flex flex-col gap-3 rounded-lg border" :class="accessForm.require_login ? 'border-muted-foreground/20 bg-muted/10 opacity-50 cursor-not-allowed' : 'border-border bg-muted/20'">
+                      <div class="px-4 py-3 sm:flex sm:items-center">
+                        <input id="enable-guest-orders" v-model="accessForm.enable_guest_orders" type="checkbox" class="h-4 w-4 accent-primary" :disabled="accessForm.require_login" />
+                        <div class="flex-1 ml-3">
+                          <label for="enable-guest-orders" class="text-sm font-medium block" :class="accessForm.require_login ? 'text-muted-foreground' : ''">{{ t('admin.settings.access.enableGuestOrders') }}</label>
+                          <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.access.enableGuestOrdersHint') }}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
