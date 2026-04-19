@@ -287,7 +287,7 @@ const dashboardForm = reactive({
 })
 
 const accessForm = reactive({
-  require_login: true,
+  require_login: false,
   enable_guest_orders: false,
 })
 
@@ -536,7 +536,7 @@ const fetchSettings = async () => {
 
     if (accessRes.data && accessRes.data.data) {
       const accessData = accessRes.data.data as Record<string, unknown>
-      accessForm.require_login = accessData.require_login !== false
+      accessForm.require_login = accessData.require_login === true
       accessForm.enable_guest_orders = !!accessData.enable_guest_orders
     }
 
@@ -583,22 +583,31 @@ const saveRegistrationSettings = async () => {
   })
 }
 
-const saveSiteSettings = async () => {
-  const payload = {
+const updateSiteConfig = async (partial: Record<string, unknown>) => {
+  const current = await adminAPI.getSettings({ key: 'site_config' })
+  const currentValue = (current.data?.data ?? {}) as Record<string, unknown>
+
+  await adminAPI.updateSettings({
     key: 'site_config',
-      value: {
-        brand: form.brand,
-        currency: String(form.currency || 'CNY').trim().toUpperCase(),
-        contact: form.contact,
-      seo: form.seo,
-      about: form.about,
-      legal: form.legal,
-      scripts: form.scripts,
-      footer_links: form.footer_links,
-      template_mode: form.template_mode,
+    value: {
+      ...currentValue,
+      ...partial,
     },
-  }
-  await adminAPI.updateSettings(payload)
+  })
+}
+
+const saveSiteSettings = async () => {
+  await updateSiteConfig({
+    brand: form.brand,
+    currency: String(form.currency || 'CNY').trim().toUpperCase(),
+    contact: form.contact,
+    seo: form.seo,
+    about: form.about,
+    legal: form.legal,
+    scripts: form.scripts,
+    footer_links: form.footer_links,
+    template_mode: form.template_mode,
+  })
 }
 
 const addAboutServiceItem = () => {
@@ -657,13 +666,9 @@ const saveTelegramAuthSettings = async () => {
 }
 
 const saveSiteUserSettings = async () => {
-  const payload = {
-    key: 'site_config',
-    value: {
-      user_url_telegram_app: telegramForm.user_url_telegram_app,
-    },
-  }
-  await adminAPI.updateSettings(payload)
+  await updateSiteConfig({
+    user_url_telegram_app: telegramForm.user_url_telegram_app,
+  })
 }
 
 
