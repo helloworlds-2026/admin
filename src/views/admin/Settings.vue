@@ -534,12 +534,13 @@ const fetchSettings = async () => {
       registrationForm.email_verification_enabled = regData.email_verification_enabled !== false
     }
 
+    if (accessRes.data && accessRes.data.data) {
+      const accessData = accessRes.data.data as Record<string, unknown>
+      accessForm.require_login = accessData.require_login !== false
+      accessForm.enable_guest_orders = !!accessData.enable_guest_orders
+    }
+
     if (orderEmailTmplRes.data && orderEmailTmplRes.data.data) {
-      if (accessRes.data && accessRes.data.data) {
-        const accessData = accessRes.data.data as Record<string, unknown>
-        accessForm.require_login = accessData.require_login !== false
-        accessForm.enable_guest_orders = !!accessData.enable_guest_orders
-      }
       const tmplData = orderEmailTmplRes.data.data as Record<string, unknown>
       const templates = tmplData.templates as Record<string, unknown> | undefined
       if (templates) {
@@ -728,7 +729,6 @@ const saveSettings = async () => {
       await saveSiteUserSettings()
     } else if (currentTab.value === 'dashboard') {
       await saveDashboardSettings()
-    } else {
     } else if (currentTab.value === 'access') {
       await saveAccessSettings()
     } else {
