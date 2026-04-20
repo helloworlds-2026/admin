@@ -251,6 +251,7 @@ const telegramForm = reactive({
   bot_token: '',
   has_bot_token: false,
   mini_app_url: '',
+  telegram_user_whitelist_enabled: false,
   telegram_user_whitelist: '',
   login_expire_seconds: 300,
   replay_ttl_seconds: 300,
@@ -513,6 +514,7 @@ const fetchSettings = async () => {
       telegramForm.bot_token = ''
       telegramForm.has_bot_token = !!telegram.has_bot_token
       telegramForm.mini_app_url = String(telegram.mini_app_url || '')
+      telegramForm.telegram_user_whitelist_enabled = !!telegram.telegram_user_whitelist_enabled
       telegramForm.telegram_user_whitelist = String(telegram.telegram_user_whitelist || '')
       telegramForm.login_expire_seconds = normalizeNumber(telegram.login_expire_seconds, 300)
       telegramForm.replay_ttl_seconds = normalizeNumber(telegram.replay_ttl_seconds, 300)
@@ -654,6 +656,7 @@ const saveTelegramAuthSettings = async () => {
     enabled: telegramForm.enabled,
     bot_username: telegramForm.bot_username,
     mini_app_url: telegramForm.mini_app_url,
+    telegram_user_whitelist_enabled: telegramForm.telegram_user_whitelist_enabled,
     telegram_user_whitelist: telegramForm.telegram_user_whitelist,
     login_expire_seconds: Number(telegramForm.login_expire_seconds),
     replay_ttl_seconds: Number(telegramForm.replay_ttl_seconds),
@@ -1240,6 +1243,15 @@ watch(currentTab, (newTab) => {
               <p class="text-xs text-muted-foreground">
                 {{ t('admin.settings.telegram.miniAppURLHint') }}
               </p>
+            </div>
+            <div class="space-y-2 md:col-span-2">
+              <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
+                <input id="telegram-user-whitelist-enabled" v-model="telegramForm.telegram_user_whitelist_enabled" type="checkbox" class="h-4 w-4 accent-primary" />
+                <div class="flex-1">
+                  <label for="telegram-user-whitelist-enabled" class="text-sm font-medium block">{{ t('admin.settings.telegram.telegramUserWhitelistEnabled') }}</label>
+                  <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.telegram.telegramUserWhitelistEnabledHint') }}</p>
+                </div>
+              </div>
             </div>
             <div class="space-y-2 md:col-span-2">
               <label class="text-xs font-medium text-muted-foreground">{{ t('admin.settings.telegram.telegramUserWhitelist') }}</label>
