@@ -100,15 +100,20 @@ export interface AdminOrderItem {
   order_id: number
   product_id: number
   sku_id: number
-  product_title: LocalizedText
-  sku_spec_values: Record<string, string>
+  title: LocalizedText
+  sku_snapshot?: {
+    sku_id?: number
+    sku_code?: string
+    spec_values?: unknown
+    image?: string
+    [key: string]: unknown
+  }
   quantity: number
   unit_price: number
   cost_price: number
   total_price: number
   fulfillment_type: string
   created_at: string
-  title?: string
   promotion_id?: number
   promotion_name?: string
   tags?: string[]
@@ -220,6 +225,8 @@ export interface AdminCoupon {
   usage_limit: number
   used_count: number
   per_user_limit: number
+  payment_roles?: string[]
+  member_levels?: number[]
   scope_type: string
   scope_ref_ids: number[] | string
   starts_at?: string
@@ -443,6 +450,26 @@ export interface AdminPayment {
   provider_payload?: Record<string, unknown>
 }
 
+// --- OrderRefund ---
+export interface AdminOrderRefund {
+  id: number
+  user_id: number
+  guest_email?: string
+  guest_locale?: string
+  order_id: number
+  order_no?: string
+  type: string
+  refund_type_label?: string
+  amount: string
+  currency: string
+  remark?: string
+  items?: AdminOrderItem[]
+  user_email?: string
+  user_display_name?: string
+  created_at: string
+  updated_at: string
+}
+
 // --- User ---
 export interface AdminUser {
   id: number
@@ -529,7 +556,6 @@ export interface AdminProcurementOrder {
   connection_id: number
   local_order_id: number
   local_order_no: string
-  upstream_order_id?: string
   upstream_order_no?: string
   status: string
   upstream_amount: number
@@ -546,6 +572,8 @@ export interface AdminProcurementOrder {
   updated_at: string
   connection_name?: string
   connection?: { id: number; name: string; type?: string; base_url?: string }
+  upstream_refund_records?: Array<Record<string, unknown>>
+  upstream_refunded_amount?: string
   [key: string]: unknown
 }
 

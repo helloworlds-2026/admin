@@ -18,6 +18,7 @@ import {
   orderStatusLabel,
 } from '@/utils/status'
 import { formatDate, formatMoney, getLocalizedText, toRFC3339 } from '@/utils/format'
+import { formatSkuDisplayLabel } from '@/utils/sku'
 import OrderDetailDialog from './components/OrderDetailDialog.vue'
 import OrderFulfillmentModal from './components/OrderFulfillmentModal.vue'
 
@@ -51,10 +52,23 @@ const showDetail = ref(false)
 const showFulfillmentModal = ref(false)
 const selectedOrder = ref<AdminOrder | null>(null)
 const fulfillmentParentId = ref<number | null>(null)
+const maxRefundDays = ref(30)
 const route = useRoute()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const adminPath = import.meta.env.VITE_ADMIN_PATH || ''
 const userDetailLink = (userId: number) => `${adminPath}/users/${userId}`
+
+const itemSkuLabel = (item: AdminOrderItem & Record<string, unknown>) =>
+  formatSkuDisplayLabel((item as any)?.sku_snapshot, locale.value)
+
+const normalizeMaxRefundDays = (raw: unknown) => {
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return 30
+  const normalized = Math.trunc(parsed)
+  if (normalized < 0) return 30
+  if (normalized > 3650) return 3650
+  return normalized
+}
 
 const normalizeFilterValue = (value: string) => (value === '__all__' ? '' : value)
 
@@ -103,6 +117,15 @@ const fetchOrders = async (page = 1) => {
   }
 }
 
+const fetchRefundConfig = async () => {
+  try {
+    const res = await adminAPI.getSettings({ key: 'order_config' })
+    maxRefundDays.value = normalizeMaxRefundDays(res.data?.data?.max_refund_days)
+  } catch {
+    maxRefundDays.value = 30
+  }
+}
+
 const handleSearch = () => {
   fetchOrders(1)
 }
@@ -128,7 +151,7 @@ const jumpToPage = () => {
 
 const canUpdateStatus = (order: AdminOrder) => {
   if (!order) return false
-  return order.status !== 'completed' && order.status !== 'canceled'
+  return order.status !== 'completed' && order.status !== 'canceled' && order.status !== 'partially_refunded' && order.status !== 'refunded'
 }
 
 const updateStatus = async (order: AdminOrder) => {
@@ -213,6 +236,7 @@ onMounted(() => {
   const initialUserId = toQueryText(route.query.user_id)
   filters.userId = initialUserId
 
+  fetchRefundConfig()
   fetchOrders()
 
   const orderId = Number(route.query.order_id)
@@ -294,9 +318,11 @@ watch(
               <SelectItem value="paid">{{ t('order.status.paid') }}</SelectItem>
               <SelectItem value="fulfilling">{{ t('order.status.fulfilling') }}</SelectItem>
               <SelectItem value="partially_delivered">{{ t('order.status.partially_delivered') }}</SelectItem>
+              <SelectItem value="partially_refunded">{{ t('order.status.partially_refunded') }}</SelectItem>
               <SelectItem value="delivered">{{ t('order.status.delivered') }}</SelectItem>
               <SelectItem value="completed">{{ t('order.status.completed') }}</SelectItem>
               <SelectItem value="canceled">{{ t('order.status.canceled') }}</SelectItem>
+              <SelectItem value="refunded">{{ t('order.status.refunded') }}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -361,9 +387,9 @@ watch(
             <TableCell class="min-w-[140px] px-4 py-3">
               <div v-if="order.items && order.items.length > 0" class="space-y-1">
                 <div v-for="item in order.items" :key="item.id" class="text-xs">
-                  <span class="text-foreground">{{ getLocalizedText(item.product_title) || getLocalizedText(item.title) || '-' }}</span>
-                  <span v-if="item.sku_spec_values && Object.keys(item.sku_spec_values).length > 0" class="ml-1 text-muted-foreground">
-                    ({{ Object.values(item.sku_spec_values).join(' / ') }})
+                  <span class="text-foreground">{{ getLocalizedText(item.title) || '-' }}</span>
+                  <span v-if="itemSkuLabel(item)" class="ml-1 text-muted-foreground">
+                    ({{ itemSkuLabel(item) }})
                   </span>
                   <span class="ml-1 text-muted-foreground">x{{ item.quantity }}</span>
                 </div>
@@ -401,9 +427,12 @@ watch(
                     <SelectItem value="pending_payment">{{ t('order.status.pending_payment') }}</SelectItem>
                     <SelectItem value="paid">{{ t('order.status.paid') }}</SelectItem>
                     <SelectItem value="fulfilling">{{ t('order.status.fulfilling') }}</SelectItem>
+                    <SelectItem value="partially_delivered">{{ t('order.status.partially_delivered') }}</SelectItem>
+                    <SelectItem value="partially_refunded">{{ t('order.status.partially_refunded') }}</SelectItem>
                     <SelectItem value="delivered">{{ t('order.status.delivered') }}</SelectItem>
                     <SelectItem value="completed">{{ t('order.status.completed') }}</SelectItem>
                     <SelectItem value="canceled">{{ t('order.status.canceled') }}</SelectItem>
+                    <SelectItem value="refunded">{{ t('order.status.refunded') }}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button v-if="canUpdateStatus(order)" size="xs" variant="outline" @click="updateStatus(order)">
@@ -469,6 +498,7 @@ watch(
       :model-value="showDetail"
       :order="selectedOrder"
       site-currency=""
+      :max-refund-days="maxRefundDays"
       @update:model-value="handleDetailClose"
       @refresh="refresh"
       @open-fulfillment="handleDetailOpenFulfillment"
