@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import RichEditor from '@/components/RichEditor.vue'
@@ -65,6 +65,7 @@ const tabs = computed(() => [
   { label: t('admin.settings.tabs.captcha'), value: 'captcha' },
   { label: t('admin.settings.tabs.telegram'), value: 'telegram' },
   { label: t('admin.settings.tabs.dashboard'), value: 'dashboard' },
+  { label: t('admin.settings.tabs.wallet'), value: 'wallet' },
 ])
 
 const fallbackCurrencyOptions = [
@@ -295,6 +296,13 @@ const accessForm = reactive({
   require_login: false,
   enable_guest_orders: false,
 })
+
+const walletForm = reactive({
+  recharge_channel_ids: [] as number[],
+  wallet_only_payment: false,
+})
+const walletPaymentChannels = ref<Array<{ id: number; name: string; is_active?: boolean }>>([])
+const walletSaving = ref(false)
 
 const getCurrentLangName = () => {
   return languages.value.find((item) => item.code === currentLang.value)?.name || t('admin.common.lang.zhCN')
@@ -564,6 +572,40 @@ const saveSiteSettings = async () => {
   })
 }
 
+const toggleWalletRechargeChannel = (channelId: number) => {
+  const idx = walletForm.recharge_channel_ids.indexOf(channelId)
+  if (idx >= 0) {
+    walletForm.recharge_channel_ids.splice(idx, 1)
+  } else {
+    walletForm.recharge_channel_ids.push(channelId)
+  }
+}
+
+const loadWalletConfig = async () => {
+  try {
+    const res = await adminAPI.getSettings({ key: 'wallet_config' })
+    const data = res.data?.data
+    if (data && Array.isArray(data.recharge_channel_ids)) {
+      walletForm.recharge_channel_ids = data.recharge_channel_ids.filter((id: unknown) => typeof id === 'number' && id > 0)
+    } else {
+      walletForm.recharge_channel_ids = []
+    }
+    walletForm.wallet_only_payment = !!data?.wallet_only_payment
+  } catch {
+    walletForm.recharge_channel_ids = []
+    walletForm.wallet_only_payment = false
+  }
+}
+
+const loadWalletPaymentChannels = async () => {
+  try {
+    const res = await adminAPI.getPaymentChannels({ page: 1, page_size: 200 })
+    walletPaymentChannels.value = (res.data?.data ?? []).filter((ch: { is_active?: boolean }) => ch.is_active)
+  } catch {
+    walletPaymentChannels.value = []
+  }
+}
+
 const saveOrderSettings = async () => {
   const normalizedMaxRefundDays = clampNumber(form.order_max_refund_days, 0, 3650, 30)
   const normalizedPaymentExpireMinutes = clampNumber(orderPaymentExpireMinutes.value, 1, 10080, 15)
@@ -693,6 +735,24 @@ const saveAccessSettings = async () => {
   })
 }
 
+const saveWalletConfig = async () => {
+  walletSaving.value = true
+  try {
+    await adminAPI.updateSettings({
+      key: 'wallet_config',
+      value: {
+        recharge_channel_ids: walletForm.recharge_channel_ids,
+        wallet_only_payment: walletForm.wallet_only_payment,
+      },
+    })
+    notifySuccess(t('admin.settings.alerts.saveSuccess'))
+  } catch (err) {
+    notifyErrorIfNeeded(err, t('admin.settings.alerts.saveFailed'))
+  } finally {
+    walletSaving.value = false
+  }
+}
+
 const saveSettings = async () => {
   if (currentTab.value === 'smtp') {
     await smtpTabRef.value?.save()
@@ -717,6 +777,8 @@ const saveSettings = async () => {
       await saveSiteUserSettings()
     } else if (currentTab.value === 'dashboard') {
       await saveDashboardSettings()
+    } else if (currentTab.value === 'wallet') {
+      await saveWalletConfig()
     } else if (currentTab.value === 'access') {
       await saveAccessSettings()
     } else {
@@ -734,6 +796,13 @@ const saveSettings = async () => {
 
 onMounted(() => {
   fetchSettings()
+})
+
+watch(currentTab, (newTab) => {
+  if (newTab === 'wallet' && walletPaymentChannels.value.length === 0) {
+    void loadWalletPaymentChannels()
+    void loadWalletConfig()
+  }
 })
 </script>
 
@@ -1350,6 +1419,45 @@ onMounted(() => {
                 <p class="text-xs text-muted-foreground">{{ t('admin.settings.dashboard.ranking.topChannelsLimitHint') }}</p>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-show="currentTab === 'wallet'" class="space-y-6">
+      <div class="rounded-xl border border-border bg-card">
+        <div class="border-b border-border bg-muted/40 px-6 py-4">
+          <h2 class="text-lg font-semibold">{{ t('admin.settings.wallet.title') }}</h2>
+          <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.wallet.subtitle') }}</p>
+        </div>
+        <div class="space-y-4 p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <label for="wallet-only-payment" class="text-sm font-medium">{{ t('admin.settings.wallet.walletOnlyPayment') }}</label>
+              <p class="mt-0.5 text-xs text-muted-foreground">{{ t('admin.settings.wallet.walletOnlyPaymentTip') }}</p>
+            </div>
+            <input id="wallet-only-payment" v-model="walletForm.wallet_only_payment" type="checkbox" class="h-4 w-4 accent-primary" />
+          </div>
+          <div class="border-t border-border pt-4">
+            <label class="mb-2 block text-xs font-medium text-muted-foreground">{{ t('admin.settings.wallet.rechargeChannels') }}</label>
+            <div v-if="walletPaymentChannels.length > 0" class="flex flex-wrap gap-2">
+              <label
+                v-for="ch in walletPaymentChannels"
+                :key="ch.id"
+                class="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs"
+                :class="walletForm.recharge_channel_ids.includes(ch.id) ? 'border-primary bg-primary/10 text-primary' : 'text-muted-foreground hover:border-primary/40'"
+              >
+                <input type="checkbox" :checked="walletForm.recharge_channel_ids.includes(ch.id)" class="h-3.5 w-3.5 accent-primary" @change="toggleWalletRechargeChannel(ch.id)" />
+                {{ ch.name }}
+              </label>
+            </div>
+            <p v-else class="text-xs text-muted-foreground">{{ t('admin.settings.wallet.noChannels') }}</p>
+            <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.wallet.rechargeChannelsTip') }}</p>
+          </div>
+          <div class="flex justify-end border-t border-border pt-4">
+            <Button :disabled="walletSaving" @click="saveWalletConfig">
+              {{ walletSaving ? t('admin.settings.actions.saving') : t('admin.settings.actions.save') }}
+            </Button>
           </div>
         </div>
       </div>
