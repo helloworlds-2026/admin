@@ -57,6 +57,7 @@ const tabs = computed(() => [
   { label: t('admin.settings.tabs.basic'), value: 'basic' },
   { label: t('admin.settings.tabs.template'), value: 'template' },
   { label: t('admin.settings.tabs.navigation'), value: 'navigation' },
+  { label: t('admin.settings.tabs.access'), value: 'access' },
   { label: t('admin.settings.tabs.about'), value: 'about' },
   { label: t('admin.settings.tabs.legal'), value: 'legal' },
   { label: t('admin.settings.tabs.smtp'), value: 'smtp' },
@@ -251,8 +252,11 @@ const telegramForm = reactive({
   bot_token: '',
   has_bot_token: false,
   mini_app_url: '',
+  telegram_user_whitelist_enabled: false,
+  telegram_user_whitelist: '',
   login_expire_seconds: 300,
   replay_ttl_seconds: 300,
+  user_url_telegram_app: false,
 })
 
 const createOrderEmailLocalizedTemplate = () => ({ subject: '', body: '' })
@@ -287,6 +291,11 @@ const dashboardForm = reactive({
   },
 })
 
+const accessForm = reactive({
+  require_login: false,
+  enable_guest_orders: false,
+})
+
 const getCurrentLangName = () => {
   return languages.value.find((item) => item.code === currentLang.value)?.name || t('admin.common.lang.zhCN')
 }
@@ -316,7 +325,7 @@ const notifyErrorIfNeeded = (err: unknown, fallback: string) => {
 const fetchSettings = async () => {
   loading.value = true
   try {
-    const [siteRes, orderRes, smtpRes, captchaRes, telegramRes, dashboardRes, registrationRes, orderEmailTmplRes] = await Promise.all([
+    const [siteRes, orderRes, smtpRes, captchaRes, telegramRes, dashboardRes, registrationRes, accessRes, orderEmailTmplRes] = await Promise.all([
       adminAPI.getSettings({ key: 'site_config' }),
       adminAPI.getSettings({ key: 'order_config' }),
       adminAPI.getSMTPSettings(),
@@ -324,6 +333,7 @@ const fetchSettings = async () => {
       adminAPI.getTelegramAuthSettings(),
       adminAPI.getSettings({ key: 'dashboard_config' }),
       adminAPI.getSettings({ key: 'registration_config' }),
+      adminAPI.getSettings({ key: 'access_config' }),
       adminAPI.getOrderEmailTemplateSettings(),
     ])
 
@@ -397,6 +407,7 @@ const fetchSettings = async () => {
 
       const rawTemplateMode = String(data.template_mode || 'card').trim()
       form.template_mode = rawTemplateMode === 'list' ? 'list' : 'card'
+      telegramForm.user_url_telegram_app = data.user_url_telegram_app === true
     }
 
     if (orderRes.data && orderRes.data.data) {
@@ -463,6 +474,8 @@ const fetchSettings = async () => {
       telegramForm.bot_token = ''
       telegramForm.has_bot_token = !!telegram.has_bot_token
       telegramForm.mini_app_url = String(telegram.mini_app_url || '')
+      telegramForm.telegram_user_whitelist_enabled = !!telegram.telegram_user_whitelist_enabled
+      telegramForm.telegram_user_whitelist = String(telegram.telegram_user_whitelist || '')
       telegramForm.login_expire_seconds = normalizeNumber(telegram.login_expire_seconds, 300)
       telegramForm.replay_ttl_seconds = normalizeNumber(telegram.replay_ttl_seconds, 300)
     }
@@ -483,6 +496,12 @@ const fetchSettings = async () => {
       const regData = registrationRes.data.data as Record<string, unknown>
       registrationForm.registration_enabled = regData.registration_enabled !== false
       registrationForm.email_verification_enabled = regData.email_verification_enabled !== false
+    }
+
+    if (accessRes.data && accessRes.data.data) {
+      const accessData = accessRes.data.data as Record<string, unknown>
+      accessForm.require_login = accessData.require_login === true
+      accessForm.enable_guest_orders = accessData.enable_guest_orders === true
     }
 
     if (orderEmailTmplRes.data && orderEmailTmplRes.data.data) {
@@ -529,7 +548,7 @@ const saveRegistrationSettings = async () => {
 }
 
 const saveSiteSettings = async () => {
-  const payload = {
+  await adminAPI.updateSettings({
     key: 'site_config',
     value: {
       brand: form.brand,
@@ -542,8 +561,7 @@ const saveSiteSettings = async () => {
       footer_links: form.footer_links,
       template_mode: form.template_mode,
     },
-  }
-  await adminAPI.updateSettings(payload)
+  })
 }
 
 const saveOrderSettings = async () => {
@@ -602,6 +620,8 @@ const saveTelegramAuthSettings = async () => {
     enabled: telegramForm.enabled,
     bot_username: telegramForm.bot_username,
     mini_app_url: telegramForm.mini_app_url,
+    telegram_user_whitelist_enabled: telegramForm.telegram_user_whitelist_enabled,
+    telegram_user_whitelist: telegramForm.telegram_user_whitelist,
     login_expire_seconds: Number(telegramForm.login_expire_seconds),
     replay_ttl_seconds: Number(telegramForm.replay_ttl_seconds),
   }
@@ -613,6 +633,25 @@ const saveTelegramAuthSettings = async () => {
   const data = res.data?.data as Record<string, unknown> | undefined
   telegramForm.bot_token = ''
   telegramForm.has_bot_token = !!data?.has_bot_token || telegramForm.has_bot_token
+}
+
+const updateSiteConfig = async (partial: Record<string, unknown>) => {
+  const current = await adminAPI.getSettings({ key: 'site_config' })
+  const currentValue = (current.data?.data ?? {}) as Record<string, unknown>
+
+  await adminAPI.updateSettings({
+    key: 'site_config',
+    value: {
+      ...currentValue,
+      ...partial,
+    },
+  })
+}
+
+const saveSiteUserSettings = async () => {
+  await updateSiteConfig({
+    user_url_telegram_app: telegramForm.user_url_telegram_app,
+  })
 }
 
 
@@ -644,6 +683,16 @@ const saveDashboardSettings = async () => {
   await adminAPI.updateSettings(payload)
 }
 
+const saveAccessSettings = async () => {
+  await adminAPI.updateSettings({
+    key: 'access_config',
+    value: {
+      require_login: accessForm.require_login,
+      enable_guest_orders: accessForm.enable_guest_orders,
+    },
+  })
+}
+
 const saveSettings = async () => {
   if (currentTab.value === 'smtp') {
     await smtpTabRef.value?.save()
@@ -665,8 +714,11 @@ const saveSettings = async () => {
   try {
     if (currentTab.value === 'telegram') {
       await saveTelegramAuthSettings()
+      await saveSiteUserSettings()
     } else if (currentTab.value === 'dashboard') {
       await saveDashboardSettings()
+    } else if (currentTab.value === 'access') {
+      await saveAccessSettings()
     } else {
       await saveRegistrationSettings()
       await saveOrderSettings()
@@ -937,6 +989,44 @@ onMounted(() => {
       </div>
     </div>
 
+    <div v-show="currentTab === 'access'" class="space-y-6">
+      <div class="rounded-xl border border-border bg-card">
+        <div class="border-b border-border bg-muted/40 px-6 py-4">
+          <h2 class="text-lg font-semibold">{{ t('admin.settings.access.title') }}</h2>
+          <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.access.subtitle') }}</p>
+        </div>
+
+        <div class="space-y-6 p-6">
+          <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
+            <input id="require-login" v-model="accessForm.require_login" type="checkbox" class="h-4 w-4 accent-primary" />
+            <div class="flex-1">
+              <label for="require-login" class="block text-sm font-medium">{{ t('admin.settings.access.requireLogin') }}</label>
+              <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.access.requireLoginHint') }}</p>
+            </div>
+          </div>
+
+          <div
+            class="flex flex-col gap-3 rounded-lg border px-4 py-3"
+            :class="accessForm.require_login ? 'border-muted-foreground/20 bg-muted/10 opacity-50' : 'border-border bg-muted/20'"
+          >
+            <div class="sm:flex sm:items-center">
+              <input
+                id="enable-guest-orders"
+                v-model="accessForm.enable_guest_orders"
+                type="checkbox"
+                class="h-4 w-4 accent-primary"
+                :disabled="accessForm.require_login"
+              />
+              <div class="ml-3 flex-1">
+                <label for="enable-guest-orders" class="block text-sm font-medium">{{ t('admin.settings.access.enableGuestOrders') }}</label>
+                <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.access.enableGuestOrdersHint') }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Template Mode Tab -->
     <div v-show="currentTab === 'template'" class="space-y-6">
       <div class="rounded-xl border border-border bg-card">
@@ -1169,6 +1259,22 @@ onMounted(() => {
                 {{ t('admin.settings.telegram.miniAppURLHint') }}
               </p>
             </div>
+            <div class="space-y-2 md:col-span-2">
+              <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
+                <input id="telegram-user-whitelist-enabled" v-model="telegramForm.telegram_user_whitelist_enabled" type="checkbox" class="h-4 w-4 accent-primary" />
+                <div class="flex-1">
+                  <label for="telegram-user-whitelist-enabled" class="block text-sm font-medium">{{ t('admin.settings.telegram.telegramUserWhitelistEnabled') }}</label>
+                  <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.telegram.telegramUserWhitelistEnabledHint') }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="space-y-2 md:col-span-2">
+              <label class="text-xs font-medium text-muted-foreground">{{ t('admin.settings.telegram.telegramUserWhitelist') }}</label>
+              <Textarea v-model="telegramForm.telegram_user_whitelist" rows="3" :placeholder="t('admin.settings.telegram.telegramUserWhitelistPlaceholder')" />
+              <p class="text-xs text-muted-foreground">
+                {{ t('admin.settings.telegram.telegramUserWhitelistHint') }}
+              </p>
+            </div>
             <div class="space-y-2">
               <label class="text-xs font-medium text-muted-foreground">{{ t('admin.settings.telegram.loginExpireSeconds') }}</label>
               <Input v-model.number="telegramForm.login_expire_seconds" type="number" min="30" max="86400" />
@@ -1176,6 +1282,16 @@ onMounted(() => {
             <div class="space-y-2">
               <label class="text-xs font-medium text-muted-foreground">{{ t('admin.settings.telegram.replayTTLSeconds') }}</label>
               <Input v-model.number="telegramForm.replay_ttl_seconds" type="number" min="60" max="86400" />
+            </div>
+          </div>
+
+          <div class="mt-6 border-t border-border pt-6">
+            <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
+              <input id="user-url-telegram-app" v-model="telegramForm.user_url_telegram_app" type="checkbox" class="h-4 w-4 accent-primary" />
+              <div class="flex-1">
+                <label for="user-url-telegram-app" class="block text-sm font-medium">{{ t('admin.settings.telegram.userURLTelegramAppOnly') }}</label>
+                <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.telegram.userURLTelegramAppOnlyHint') }}</p>
+              </div>
             </div>
           </div>
         </div>
