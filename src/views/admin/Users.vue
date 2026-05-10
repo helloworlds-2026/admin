@@ -6,13 +6,16 @@ import { adminAPI } from '@/api/admin'
 import type { AdminUser, AdminMemberLevel } from '@/api/types'
 import IdCell from '@/components/IdCell.vue'
 import { userStatusClass, userStatusLabel } from '@/utils/status'
-import { formatDate, formatMoney, getLocalizedText } from '@/utils/format'
+import { formatDate, formatMoney, getLocalizedText, toRFC3339 } from '@/utils/format'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { toggleArrayMember } from '@/lib/utils'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogHeader, DialogScrollContent, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import TableSkeleton from '@/components/TableSkeleton.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { confirmAction } from '@/utils/confirm'
 import { useFormValidation, rules } from '@/composables/useFormValidation'
@@ -28,7 +31,6 @@ const pagination = ref({
   total: 0,
   total_page: 1,
 })
-const jumpPage = ref('')
 const filters = reactive({
   keyword: '',
   status: '__all__',
@@ -66,10 +68,10 @@ const fetchUsers = async (page = 1) => {
       page_size: pagination.value.page_size,
       keyword: filters.keyword || undefined,
       status: normalizeFilterValue(filters.status) || undefined,
-      created_from: filters.createdFrom || undefined,
-      created_to: filters.createdTo || undefined,
-      last_login_from: filters.lastLoginFrom || undefined,
-      last_login_to: filters.lastLoginTo || undefined,
+      created_from: toRFC3339(filters.createdFrom),
+      created_to: toRFC3339(filters.createdTo),
+      last_login_from: toRFC3339(filters.lastLoginFrom),
+      last_login_to: toRFC3339(filters.lastLoginTo),
     })
     users.value = response.data.data || []
     pagination.value = response.data.pagination || pagination.value
@@ -149,6 +151,10 @@ const toggleSelectAll = () => {
   selectedIds.value = users.value.map((item) => item.id)
 }
 
+const toggleUserSelected = (id: number, v: boolean | 'indeterminate') => {
+  toggleArrayMember(selectedIds, id, v)
+}
+
 const batchUpdateStatus = async (status: string) => {
   if (selectedIds.value.length === 0) return
   const confirmed = await confirmAction(t('admin.users.batch.confirm', { count: selectedIds.value.length }))
@@ -169,13 +175,12 @@ const changePage = (page: number) => {
   fetchUsers(page)
 }
 
-const jumpToPage = () => {
-  if (!jumpPage.value) return
-  const raw = Number(jumpPage.value)
-  if (Number.isNaN(raw)) return
-  const target = Math.min(Math.max(Math.floor(raw), 1), pagination.value.total_page)
-  if (target === pagination.value.page) return
-  changePage(target)
+const pageSizeOptions = [10, 20, 50, 100]
+
+const changePageSize = (size: number) => {
+  if (size === pagination.value.page_size) return
+  pagination.value.page_size = size
+  fetchUsers(1)
 }
 
 const openEditModal = (user: AdminUser) => {
@@ -267,7 +272,7 @@ onMounted(() => {
           <span class="text-xs text-muted-foreground whitespace-nowrap">{{ t('admin.users.filterCreatedRange') }}</span>
           <Input
             v-model="filters.createdFrom"
-            type="date"
+            type="datetime-local"
             class="h-9 w-full md:w-auto"
             :placeholder="t('admin.users.filterCreatedFrom')"
             @update:modelValue="handleSearch"
@@ -275,7 +280,7 @@ onMounted(() => {
           <span class="hidden text-muted-foreground md:inline">-</span>
           <Input
             v-model="filters.createdTo"
-            type="date"
+            type="datetime-local"
             class="h-9 w-full md:w-auto"
             :placeholder="t('admin.users.filterCreatedTo')"
             @update:modelValue="handleSearch"
@@ -285,7 +290,7 @@ onMounted(() => {
           <span class="text-xs text-muted-foreground whitespace-nowrap">{{ t('admin.users.filterLastLoginRange') }}</span>
           <Input
             v-model="filters.lastLoginFrom"
-            type="date"
+            type="datetime-local"
             class="h-9 w-full md:w-auto"
             :placeholder="t('admin.users.filterLastLoginFrom')"
             @update:modelValue="handleSearch"
@@ -293,7 +298,7 @@ onMounted(() => {
           <span class="hidden text-muted-foreground md:inline">-</span>
           <Input
             v-model="filters.lastLoginTo"
-            type="date"
+            type="datetime-local"
             class="h-9 w-full md:w-auto"
             :placeholder="t('admin.users.filterLastLoginTo')"
             @update:modelValue="handleSearch"
@@ -312,7 +317,7 @@ onMounted(() => {
         <TableHeader class="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
           <TableRow>
             <TableHead class="px-6 py-3">
-              <input type="checkbox" :checked="allSelected" class="h-4 w-4 accent-primary" @change="toggleSelectAll" />
+              <Checkbox :model-value="allSelected" @update:model-value="toggleSelectAll" />
             </TableHead>
             <TableHead class="px-6 py-3">{{ t('admin.users.table.id') }}</TableHead>
             <TableHead class="px-6 py-3 min-w-[140px]">{{ t('admin.users.table.email') }}</TableHead>
@@ -338,7 +343,7 @@ onMounted(() => {
           </TableRow>
           <TableRow v-for="user in users" :key="user.id" class="hover:bg-muted/30">
             <TableCell class="px-6 py-4">
-              <input type="checkbox" :value="user.id" v-model="selectedIds" class="h-4 w-4 accent-primary" />
+              <Checkbox :model-value="selectedIds.includes(user.id)" @update:model-value="(v) => toggleUserSelected(user.id, v)" />
             </TableCell>
             <TableCell class="px-6 py-4">
               <IdCell :value="user.id" />
@@ -370,14 +375,16 @@ onMounted(() => {
         </TableBody>
       </Table>
 
-      <div
-        v-if="pagination.total_page > 1"
-        class="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4"
+      <ListPagination
+        :page="pagination.page"
+        :total-page="pagination.total_page"
+        :total="pagination.total"
+        :page-size="pagination.page_size"
+        :page-size-options="pageSizeOptions"
+        @change-page="changePage"
+        @change-page-size="changePageSize"
       >
-        <div class="flex items-center gap-3">
-          <span class="text-xs text-muted-foreground">
-            {{ t('admin.common.pageInfo', { total: pagination.total, page: pagination.page, totalPage: pagination.total_page }) }}
-          </span>
+        <template #actions>
           <div v-if="selectedIds.length > 0" class="flex items-center gap-2">
             <Button
               size="sm"
@@ -396,37 +403,8 @@ onMounted(() => {
               {{ t('admin.users.batch.disable') }}
             </Button>
           </div>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <div class="flex items-center gap-2">
-            <Input
-              v-model="jumpPage"
-              type="number"
-              min="1"
-              :max="pagination.total_page"
-              class="h-8 w-20"
-              :placeholder="t('admin.common.jumpPlaceholder')"
-            />
-            <Button variant="outline" size="sm" class="h-8" @click="jumpToPage">
-              {{ t('admin.common.jumpTo') }}
-            </Button>
-          </div>
-          <div class="flex items-center gap-2">
-            <Button variant="outline" size="sm" class="h-8" :disabled="pagination.page <= 1" @click="changePage(pagination.page - 1)">
-              {{ t('admin.common.prevPage') }}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              class="h-8"
-              :disabled="pagination.page >= pagination.total_page"
-              @click="changePage(pagination.page + 1)"
-            >
-              {{ t('admin.common.nextPage') }}
-            </Button>
-          </div>
-        </div>
-      </div>
+        </template>
+      </ListPagination>
     </div>
 
     <Dialog v-model:open="showModal" @update:open="(value) => { if (!value) closeModal() }">

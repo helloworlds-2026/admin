@@ -21,6 +21,7 @@ export interface AdminCategory {
   name: LocalizedText
   icon: string
   sort_order: number
+  is_active: boolean
   created_at: string
 }
 
@@ -56,6 +57,7 @@ export interface AdminProduct {
   images: string[]
   tags: string[]
   purchase_type: string
+  min_purchase_quantity: number
   max_purchase_quantity: number
   fulfillment_type: string
   manual_form_schema: Record<string, unknown> | null
@@ -529,6 +531,8 @@ export interface AdminSiteConnection {
 }
 
 // --- ProductMapping ---
+export type UpstreamProductStatus = 'active' | 'inactive' | 'deleted'
+
 export interface AdminProductMapping {
   id: number
   connection_id: number
@@ -540,6 +544,7 @@ export interface AdminProductMapping {
   upstream_price: number
   upstream_currency: string
   is_active: boolean
+  upstream_status?: UpstreamProductStatus
   last_sync_at?: string
   created_at: string
   updated_at: string
