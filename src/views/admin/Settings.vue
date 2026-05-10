@@ -817,6 +817,15 @@ watch(currentTab, (newTab) => {
     void loadWalletConfig()
   }
 })
+
+const openSiteIconPicker = () => {
+  siteIconPickerRef.value?.open()
+}
+
+const clearSiteIcon = () => {
+  form.brand.site_icon = ''
+  applySiteIcon('')
+}
 </script>
 
 <template>
