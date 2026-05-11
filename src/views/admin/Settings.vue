@@ -819,7 +819,7 @@ watch(currentTab, (newTab) => {
 })
 
 const openSiteIconPicker = () => {
-  siteIconPickerRef.value?.open()
+  siteIconPickerRef.value?.open?.()
 }
 
 const clearSiteIcon = () => {
