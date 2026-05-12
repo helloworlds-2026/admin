@@ -8,7 +8,9 @@ import type { AdminProduct, AdminProductSKU, AdminCardSecret, AdminCardSecretBat
 import { Upload, PackagePlus } from 'lucide-vue-next'
 import IdCell from '@/components/IdCell.vue'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
+import { toggleArrayMember } from '@/lib/utils'
 import ListPagination from '@/components/ListPagination.vue'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import TableSkeleton from '@/components/TableSkeleton.vue'
@@ -269,6 +271,10 @@ const toggleSelectAllSecrets = () => {
   selectedSecretIds.value = cardSecrets.value
     .map((item: AdminCardSecret) => Number(item?.id || 0))
     .filter((item: number) => Number.isFinite(item) && item > 0)
+}
+
+const toggleSecretSelected = (id: number, v: boolean | 'indeterminate') => {
+  toggleArrayMember(selectedSecretIds, id, v)
 }
 
 const clearBatchFilter = () => {
@@ -825,6 +831,23 @@ onMounted(async () => {
         <p v-if="currentProductId">
           {{ t('admin.cardSecrets.skuLabel') }}：{{ currentSkuId ? resolveSkuLabelById(currentSkuId) : t('admin.cardSecrets.skuAll') }}
         </p>
+        <p
+          v-if="currentProductId && (statsLoading || stats)"
+          class="text-sm xl:whitespace-nowrap"
+        >
+          <template v-if="statsLoading">{{ t('admin.common.loading') }}</template>
+          <template v-else-if="stats">
+            <strong class="font-semibold text-foreground">{{ t('admin.cardSecrets.statsTitle') }}：</strong>
+            {{ t('admin.cardSecrets.stats.available') }}
+            (<span class="font-mono text-emerald-700">{{ stats.available }}</span>) /
+            {{ t('admin.cardSecrets.stats.reserved') }}
+            (<span class="font-mono text-amber-700">{{ stats.reserved }}</span>) /
+            {{ t('admin.cardSecrets.stats.used') }}
+            (<span class="font-mono text-foreground">{{ stats.used }}</span>) /
+            {{ t('admin.cardSecrets.stats.total') }}
+            (<span class="font-mono text-foreground">{{ stats.total }}</span>)
+          </template>
+        </p>
         <p v-if="currentProductId">
           {{ currentBatchFilterText }}
           <button
@@ -839,112 +862,83 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[320px,minmax(0,1fr)] xl:items-start">
-      <div class="rounded-xl border border-border bg-card p-5">
-        <div class="mb-4 flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-foreground">{{ t('admin.cardSecrets.statsTitle') }}</h2>
-          <Button size="sm" variant="outline" @click="refreshStats">{{ t('admin.common.refresh') }}</Button>
+    <div class="rounded-xl border border-border bg-card p-5">
+      <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-foreground">{{ t('admin.cardSecrets.batchesTitle') }}</h2>
+          <p class="text-xs text-muted-foreground">{{ t('admin.cardSecrets.batch.navigatorHint') }}</p>
         </div>
-        <div v-if="statsLoading" class="text-sm text-muted-foreground">{{ t('admin.common.loading') }}</div>
-        <div v-else-if="!stats" class="text-sm text-muted-foreground">{{ t('admin.cardSecrets.selectProductTip') }}</div>
-        <div v-else class="space-y-3 text-sm">
-          <div class="flex items-center justify-between text-muted-foreground">
-            <span>{{ t('admin.cardSecrets.stats.total') }}</span>
-            <span class="font-mono text-foreground">{{ stats.total }}</span>
-          </div>
-          <div class="flex items-center justify-between text-muted-foreground">
-            <span>{{ t('admin.cardSecrets.stats.available') }}</span>
-            <span class="font-mono text-emerald-700">{{ stats.available }}</span>
-          </div>
-          <div class="flex items-center justify-between text-muted-foreground">
-            <span>{{ t('admin.cardSecrets.stats.reserved') }}</span>
-            <span class="font-mono text-amber-700">{{ stats.reserved }}</span>
-          </div>
-          <div class="flex items-center justify-between text-muted-foreground">
-            <span>{{ t('admin.cardSecrets.stats.used') }}</span>
-            <span class="font-mono text-foreground">{{ stats.used }}</span>
-          </div>
-        </div>
+        <Button size="sm" variant="outline" @click="fetchBatches(1)">{{ t('admin.common.refresh') }}</Button>
       </div>
 
-      <div class="rounded-xl border border-border bg-card p-5">
-        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 class="text-lg font-semibold text-foreground">{{ t('admin.cardSecrets.batchesTitle') }}</h2>
-            <p class="text-xs text-muted-foreground">{{ t('admin.cardSecrets.batch.navigatorHint') }}</p>
+      <div class="space-y-3">
+        <button
+          type="button"
+          class="w-full rounded-xl border px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
+          :class="!currentBatchId ? 'border-primary bg-primary/5 shadow-sm' : 'border-border bg-background'"
+          @click="filterByBatch(null)"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-medium text-foreground">{{ t('admin.cardSecrets.batch.navigatorAll') }}</span>
+            <span class="text-xs text-muted-foreground">{{ batchPagination.total }}</span>
           </div>
-          <Button size="sm" variant="outline" @click="fetchBatches(1)">{{ t('admin.common.refresh') }}</Button>
-        </div>
+          <p class="mt-2 text-xs text-muted-foreground">{{ t('admin.cardSecrets.batch.navigatorAllDesc') }}</p>
+        </button>
 
-        <div class="space-y-3">
+        <div class="max-h-[20rem] space-y-3 overflow-y-auto pr-1">
+          <div v-if="batchesLoading" class="space-y-3">
+            <div v-for="index in 4" :key="index" class="animate-pulse rounded-xl border border-border bg-muted/30 p-4">
+              <div class="h-4 w-1/2 rounded bg-muted" />
+              <div class="mt-3 h-3 w-3/4 rounded bg-muted" />
+              <div class="mt-2 h-3 w-2/3 rounded bg-muted" />
+            </div>
+          </div>
+          <div v-else-if="batches.length === 0" class="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+            {{ t('admin.cardSecrets.emptyBatches') }}
+          </div>
           <button
+            v-for="batch in batches"
+            :key="batch.id"
             type="button"
             class="w-full rounded-xl border px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-            :class="!currentBatchId ? 'border-primary bg-primary/5 shadow-sm' : 'border-border bg-background'"
-            @click="filterByBatch(null)"
+            :class="currentBatchId === Number(batch.id || 0) ? 'border-primary bg-primary/5 shadow-sm' : 'border-border bg-background'"
+            @click="filterByBatch(batch)"
           >
-            <div class="flex items-center justify-between gap-3">
-              <span class="text-sm font-medium text-foreground">{{ t('admin.cardSecrets.batch.navigatorAll') }}</span>
-              <span class="text-xs text-muted-foreground">{{ batchPagination.total }}</span>
+            <div class="flex items-start justify-between gap-3">
+              <div class="space-y-1">
+                <p class="text-sm font-medium text-foreground">{{ batch.batch_no || `#${batch.id}` }}</p>
+                <p class="text-xs text-muted-foreground">#{{ batch.id }} · {{ batchSkuLabel(batch) }}</p>
+              </div>
+              <span class="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                {{ batch.total_count }}
+              </span>
             </div>
-            <p class="mt-2 text-xs text-muted-foreground">{{ t('admin.cardSecrets.batch.navigatorAllDesc') }}</p>
+            <div class="mt-3 flex flex-wrap gap-2 text-[11px]">
+              <span class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
+                {{ t('admin.cardSecrets.stats.available') }} {{ batch.available_count }}
+              </span>
+              <span class="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
+                {{ t('admin.cardSecrets.stats.reserved') }} {{ batch.reserved_count }}
+              </span>
+              <span class="rounded-full border border-border bg-muted/40 px-2 py-1 text-muted-foreground">
+                {{ t('admin.cardSecrets.stats.used') }} {{ batch.used_count }}
+              </span>
+            </div>
+            <p v-if="batch.note" class="mt-3 line-clamp-2 text-xs text-muted-foreground">{{ batch.note }}</p>
+            <p class="mt-3 text-[11px] text-muted-foreground">{{ formatDate(batch.created_at) }}</p>
           </button>
-
-          <div class="max-h-[20rem] space-y-3 overflow-y-auto pr-1">
-            <div v-if="batchesLoading" class="space-y-3">
-              <div v-for="index in 4" :key="index" class="animate-pulse rounded-xl border border-border bg-muted/30 p-4">
-                <div class="h-4 w-1/2 rounded bg-muted" />
-                <div class="mt-3 h-3 w-3/4 rounded bg-muted" />
-                <div class="mt-2 h-3 w-2/3 rounded bg-muted" />
-              </div>
-            </div>
-            <div v-else-if="batches.length === 0" class="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-              {{ t('admin.cardSecrets.emptyBatches') }}
-            </div>
-            <button
-              v-for="batch in batches"
-              :key="batch.id"
-              type="button"
-              class="w-full rounded-xl border px-4 py-3 text-left transition hover:border-primary/40 hover:bg-primary/5"
-              :class="currentBatchId === Number(batch.id || 0) ? 'border-primary bg-primary/5 shadow-sm' : 'border-border bg-background'"
-              @click="filterByBatch(batch)"
-            >
-              <div class="flex items-start justify-between gap-3">
-                <div class="space-y-1">
-                  <p class="text-sm font-medium text-foreground">{{ batch.batch_no || `#${batch.id}` }}</p>
-                  <p class="text-xs text-muted-foreground">#{{ batch.id }} · {{ batchSkuLabel(batch) }}</p>
-                </div>
-                <span class="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                  {{ batch.total_count }}
-                </span>
-              </div>
-              <div class="mt-3 flex flex-wrap gap-2 text-[11px]">
-                <span class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
-                  {{ t('admin.cardSecrets.stats.available') }} {{ batch.available_count }}
-                </span>
-                <span class="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
-                  {{ t('admin.cardSecrets.stats.reserved') }} {{ batch.reserved_count }}
-                </span>
-                <span class="rounded-full border border-border bg-muted/40 px-2 py-1 text-muted-foreground">
-                  {{ t('admin.cardSecrets.stats.used') }} {{ batch.used_count }}
-                </span>
-              </div>
-              <p v-if="batch.note" class="mt-3 line-clamp-2 text-xs text-muted-foreground">{{ batch.note }}</p>
-              <p class="mt-3 text-[11px] text-muted-foreground">{{ formatDate(batch.created_at) }}</p>
-            </button>
-          </div>
         </div>
-
-        <ListPagination
-          :page="batchPagination.page"
-          :total-page="batchPagination.total_page"
-          :total="batchPagination.total"
-          :page-size="batchPagination.page_size"
-          :page-size-options="pageSizeOptions"
-          @change-page="changeBatchPage"
-          @change-page-size="changeBatchPageSize"
-        />
       </div>
+
+      <ListPagination
+        :page="batchPagination.page"
+        :total-page="batchPagination.total_page"
+        :total="batchPagination.total"
+        :page-size="batchPagination.page_size"
+        :page-size-options="pageSizeOptions"
+        @change-page="changeBatchPage"
+        @change-page-size="changeBatchPageSize"
+      />
     </div>
 
     <div class="rounded-xl border border-border bg-card p-4 md:p-6">
@@ -1071,7 +1065,7 @@ onMounted(async () => {
             <TableHeader class="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
               <TableRow>
                 <TableHead class="px-4 py-3">
-                  <input type="checkbox" class="h-4 w-4 accent-primary" :checked="allCurrentPageSelected" @change="toggleSelectAllSecrets" />
+                  <Checkbox :model-value="allCurrentPageSelected" @update:model-value="toggleSelectAllSecrets" />
                 </TableHead>
                 <TableHead class="px-4 py-3">{{ t('admin.cardSecrets.listTable.id') }}</TableHead>
                 <TableHead class="min-w-[100px] px-4 py-3">{{ t('admin.cardSecrets.listTable.secret') }}</TableHead>
@@ -1095,7 +1089,7 @@ onMounted(async () => {
               </TableRow>
               <TableRow v-for="secret in cardSecrets" :key="secret.id" class="hover:bg-muted/30">
                 <TableCell class="px-4 py-3">
-                  <input v-model="selectedSecretIds" type="checkbox" :value="secret.id" class="h-4 w-4 accent-primary" />
+                  <Checkbox :model-value="selectedSecretIds.includes(secret.id)" @update:model-value="(v) => toggleSecretSelected(secret.id, v)" />
                 </TableCell>
                 <TableCell class="px-4 py-3">
                   <IdCell :value="secret.id" />

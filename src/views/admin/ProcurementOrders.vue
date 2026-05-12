@@ -4,9 +4,10 @@ import { useI18n } from 'vue-i18n'
 import { useDebounceFn } from '@vueuse/core'
 import { adminAPI } from '@/api/admin'
 import type { AdminProcurementOrder, AdminSiteConnection } from '@/api/types'
-import { getLocalizedText, formatMoney, hasPositiveAmount } from '@/utils/format'
+import { getLocalizedText, formatMoney, hasPositiveAmount, toRFC3339 } from '@/utils/format'
 import { orderStatusLabel } from '@/utils/status'
 import TableSkeleton from '@/components/TableSkeleton.vue'
+import ListPagination from '@/components/ListPagination.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogScrollContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -55,8 +56,6 @@ const pagination = reactive({
   total: 0,
   total_page: 1,
 })
-const jumpPage = ref('')
-
 const filters = reactive({
   status: '__all__',
   connection_id: '__all__',
@@ -102,16 +101,48 @@ const statusOptions = [
   { value: 'canceled', key: 'procurement.status.canceled' },
 ]
 
-// Stats
-const stats = computed(() => {
-  const all = orders.value
-  return {
-    total: pagination.total,
-    pending: all.filter((o) => o.status === 'pending').length,
-    failed: all.filter((o) => o.status === 'failed' || o.status === 'rejected').length,
-    fulfilled: all.filter((o) => o.status === 'fulfilled').length,
-  }
+// Stats（来自后端聚合接口，基于全量数据，与 status 筛选解耦）
+const stats = reactive({
+  total: 0,
+  pending: 0,
+  failed: 0,
+  rejected: 0,
+  fulfilled: 0,
+  other: 0, // 其他状态合计（accepted/submitted/canceled/refunded 等中间态），保证四细分卡 + other = total
 })
+
+const buildStatsParams = () => {
+  const params: Record<string, unknown> = {}
+  if (filters.connection_id && filters.connection_id !== '__all__') params.connection_id = filters.connection_id
+  if (filters.order_no) params.order_no = filters.order_no
+  if (filters.upstream_order_no) params.upstream_order_no = filters.upstream_order_no
+  const createdFrom = toRFC3339(filters.created_from)
+  if (createdFrom) params.created_from = createdFrom
+  const createdTo = toRFC3339(filters.created_to)
+  if (createdTo) params.created_to = createdTo
+  return params
+}
+
+const fetchStats = async () => {
+  try {
+    const res = await adminAPI.getProcurementOrderStats(buildStatsParams())
+    const data = res.data?.data ?? {}
+    const byStatus = (data.by_status ?? {}) as Record<string, number>
+    const total = Number(data.total ?? 0)
+    const pending = Number(byStatus.pending ?? 0)
+    const failed = Number(byStatus.failed ?? 0)
+    const rejected = Number(byStatus.rejected ?? 0)
+    const fulfilled = Number(byStatus.fulfilled ?? 0)
+    stats.total = total
+    stats.pending = pending
+    stats.failed = failed
+    stats.rejected = rejected
+    stats.fulfilled = fulfilled
+    stats.other = Math.max(0, total - pending - failed - rejected - fulfilled)
+  } catch {
+    // 失败时保留旧值，避免与 list 已有数据冲突；list 失败会自带提示
+  }
+}
 
 const fetchConnections = async () => {
   try {
@@ -131,8 +162,10 @@ const fetchOrders = async (page = 1) => {
     if (filters.connection_id && filters.connection_id !== '__all__') params.connection_id = filters.connection_id
     if (filters.order_no) params.order_no = filters.order_no
     if (filters.upstream_order_no) params.upstream_order_no = filters.upstream_order_no
-    if (filters.created_from) params.created_from = filters.created_from
-    if (filters.created_to) params.created_to = filters.created_to
+    const createdFrom = toRFC3339(filters.created_from)
+    if (createdFrom) params.created_from = createdFrom
+    const createdTo = toRFC3339(filters.created_to)
+    if (createdTo) params.created_to = createdTo
 
     const res = await adminAPI.getProcurementOrders(params)
     orders.value = (res.data.data as ProcurementOrderWithRelations[]) || []
@@ -155,19 +188,28 @@ const changePage = (page: number) => {
   fetchOrders(page)
 }
 
-const jumpToPage = () => {
-  if (!jumpPage.value) return
-  const raw = Number(jumpPage.value)
-  if (Number.isNaN(raw)) return
-  const target = Math.min(Math.max(Math.floor(raw), 1), pagination.total_page)
-  if (target === pagination.page) return
-  changePage(target)
+const pageSizeOptions = [10, 20, 50, 100]
+
+const changePageSize = (size: number) => {
+  if (size === pagination.page_size) return
+  pagination.page_size = size
+  fetchOrders(1)
 }
 
 const handleSearch = () => {
   fetchOrders(1)
+  fetchStats()
 }
 const debouncedSearch = useDebounceFn(handleSearch, 300)
+
+const selectStatusFilter = (status: string) => {
+  if (filters.status === status) {
+    filters.status = '__all__'
+  } else {
+    filters.status = status
+  }
+  fetchOrders(1)
+}
 
 const openDetail = async (order: ProcurementOrderWithRelations) => {
   detailLoading.value = true
@@ -368,6 +410,7 @@ const canCancel = (status: string) => ['pending', 'submitted', 'accepted', 'fail
 onMounted(() => {
   fetchConnections()
   fetchOrders()
+  fetchStats()
 })
 </script>
 
@@ -385,22 +428,59 @@ onMounted(() => {
     </div>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-      <div class="rounded-xl border border-border bg-card p-4">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <button
+        type="button"
+        class="rounded-xl border bg-card p-4 text-left transition-all hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        :class="filters.status === '__all__' ? 'border-foreground/40 ring-1 ring-foreground/30' : 'border-border'"
+        :title="t('procurement.stats.totalHint')"
+        @click="selectStatusFilter('__all__')"
+      >
         <div class="text-xs font-medium text-muted-foreground">{{ t('procurement.stats.total') }}</div>
         <div class="mt-1 text-2xl font-bold">{{ stats.total }}</div>
-      </div>
-      <div class="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+      </button>
+      <button
+        type="button"
+        class="rounded-xl border bg-amber-50/50 p-4 text-left transition-all hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+        :class="filters.status === 'pending' ? 'border-amber-400 ring-1 ring-amber-300' : 'border-amber-200'"
+        @click="selectStatusFilter('pending')"
+      >
         <div class="text-xs font-medium text-amber-700">{{ t('procurement.stats.pending') }}</div>
         <div class="mt-1 text-2xl font-bold text-amber-700">{{ stats.pending }}</div>
-      </div>
-      <div class="rounded-xl border border-red-200 bg-red-50/50 p-4">
+      </button>
+      <button
+        type="button"
+        class="rounded-xl border bg-red-50/50 p-4 text-left transition-all hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
+        :class="filters.status === 'failed' ? 'border-red-400 ring-1 ring-red-300' : 'border-red-200'"
+        @click="selectStatusFilter('failed')"
+      >
         <div class="text-xs font-medium text-red-700">{{ t('procurement.stats.failed') }}</div>
         <div class="mt-1 text-2xl font-bold text-red-700">{{ stats.failed }}</div>
-      </div>
-      <div class="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+      </button>
+      <button
+        type="button"
+        class="rounded-xl border bg-rose-50/50 p-4 text-left transition-all hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+        :class="filters.status === 'rejected' ? 'border-rose-400 ring-1 ring-rose-300' : 'border-rose-200'"
+        @click="selectStatusFilter('rejected')"
+      >
+        <div class="text-xs font-medium text-rose-700">{{ t('procurement.stats.rejected') }}</div>
+        <div class="mt-1 text-2xl font-bold text-rose-700">{{ stats.rejected }}</div>
+      </button>
+      <button
+        type="button"
+        class="rounded-xl border bg-emerald-50/50 p-4 text-left transition-all hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+        :class="filters.status === 'fulfilled' ? 'border-emerald-400 ring-1 ring-emerald-300' : 'border-emerald-200'"
+        @click="selectStatusFilter('fulfilled')"
+      >
         <div class="text-xs font-medium text-emerald-700">{{ t('procurement.stats.fulfilled') }}</div>
         <div class="mt-1 text-2xl font-bold text-emerald-700">{{ stats.fulfilled }}</div>
+      </button>
+      <div
+        class="cursor-default rounded-xl border border-border bg-muted/30 p-4"
+        :title="t('procurement.stats.otherHint')"
+      >
+        <div class="text-xs font-medium text-muted-foreground">{{ t('procurement.stats.other') }}</div>
+        <div class="mt-1 text-2xl font-bold text-muted-foreground">{{ stats.other }}</div>
       </div>
     </div>
 
@@ -444,9 +524,9 @@ onMounted(() => {
       <div class="w-full sm:w-auto">
         <label class="mb-1.5 block text-xs font-medium text-muted-foreground">{{ t('procurement.filters.dateRange') }}</label>
         <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center">
-          <Input v-model="filters.created_from" type="date" class="h-9 w-full sm:w-36" @change="handleSearch" />
+          <Input v-model="filters.created_from" type="datetime-local" class="h-9 w-full sm:w-44" @change="handleSearch" />
           <span class="hidden text-xs text-muted-foreground sm:inline">—</span>
-          <Input v-model="filters.created_to" type="date" class="h-9 w-full sm:w-36" @change="handleSearch" />
+          <Input v-model="filters.created_to" type="datetime-local" class="h-9 w-full sm:w-44" @change="handleSearch" />
         </div>
       </div>
       <Button size="sm" class="h-9 w-full sm:w-auto" @click="handleSearch">{{ t('procurement.filters.search') }}</Button>
@@ -573,21 +653,15 @@ onMounted(() => {
     </div>
 
     <!-- Pagination -->
-    <div v-if="pagination.total_page > 1" class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <span class="text-xs text-muted-foreground">
-        {{ t('admin.common.pageInfo', { total: pagination.total, page: pagination.page, totalPage: pagination.total_page }) }}
-      </span>
-      <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-        <Input v-model="jumpPage" type="number" min="1" :max="pagination.total_page" class="h-8 w-full sm:w-20" :placeholder="t('admin.common.jumpPlaceholder')" />
-        <Button variant="outline" size="sm" class="h-8 w-full sm:w-auto" @click="jumpToPage">{{ t('admin.common.jumpTo') }}</Button>
-        <Button variant="outline" size="sm" class="h-8 w-full sm:w-auto" :disabled="pagination.page <= 1" @click="changePage(pagination.page - 1)">
-          {{ t('admin.common.prevPage') }}
-        </Button>
-        <Button variant="outline" size="sm" class="h-8 w-full sm:w-auto" :disabled="pagination.page >= pagination.total_page" @click="changePage(pagination.page + 1)">
-          {{ t('admin.common.nextPage') }}
-        </Button>
-      </div>
-    </div>
+    <ListPagination
+      :page="pagination.page"
+      :total-page="pagination.total_page"
+      :total="pagination.total"
+      :page-size="pagination.page_size"
+      :page-size-options="pageSizeOptions"
+      @change-page="changePage"
+      @change-page-size="changePageSize"
+    />
 
     <!-- Detail Dialog -->
     <Dialog v-model:open="showDetail" @update:open="(value: boolean) => { if (!value) closeDetail() }">
