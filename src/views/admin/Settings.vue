@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
+import type { AdminPaymentChannel } from '@/api/types'
 import RichEditor from '@/components/RichEditor.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -345,7 +346,7 @@ const loadWalletConfig = async () => {
 const loadWalletPaymentChannels = async () => {
   try {
     const res = await adminAPI.getPaymentChannels({ page: 1, page_size: 200 })
-    walletPaymentChannels.value = (res.data?.data ?? []).filter((ch: AdminPaymentChannel) => ch.is_active)
+    walletPaymentChannels.value = ((res.data?.data ?? []) as AdminPaymentChannel[]).filter((ch) => ch.is_active)
   } catch {
     walletPaymentChannels.value = []
   }
