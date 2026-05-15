@@ -20,13 +20,16 @@ import SettingsCaptchaTab from './components/SettingsCaptchaTab.vue'
 import SettingsOrderEmailTemplateTab from './components/SettingsOrderEmailTemplateTab.vue'
 import SettingsNavigationTab from './components/SettingsNavigationTab.vue'
 
+/** MediaPicker 通过 defineExpose({ openPicker }) 暴露；与 InstanceType 交叉，避免 vue-tsc 未合并 expose 时误报缺少方法 */
+type SiteIconPickerInstance = InstanceType<typeof MediaPicker> & { openPicker: () => void }
+
 const { t } = useI18n()
 const loading = ref(false)
 const smtpTabRef = ref<InstanceType<typeof SettingsSMTPTab>>()
 const captchaTabRef = ref<InstanceType<typeof SettingsCaptchaTab>>()
 const orderEmailTemplateTabRef = ref<InstanceType<typeof SettingsOrderEmailTemplateTab>>()
 const navigationTabRef = ref<InstanceType<typeof SettingsNavigationTab>>()
-const siteIconPickerRef = ref<InstanceType<typeof MediaPicker> | null>(null)
+const siteIconPickerRef = ref<SiteIconPickerInstance | null>(null)
 const supportedLanguages = ['zh-CN', 'zh-TW', 'en-US'] as const
 type SupportedLanguage = (typeof supportedLanguages)[number]
 type SiteScriptPosition = 'head' | 'body_end'
@@ -642,11 +645,12 @@ const saveSiteSettings = async () => {
 }
 
 const openSiteIconPicker = () => {
-  siteIconPickerRef.value?.openPicker()
+  siteIconPickerRef.value?.openPicker?.()
 }
 
 const clearSiteIcon = () => {
   form.brand.site_icon = ''
+  applySiteIcon('')
 }
 
 const saveOrderSettings = async () => {
