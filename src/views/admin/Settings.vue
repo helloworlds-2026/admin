@@ -20,13 +20,16 @@ import SettingsCaptchaTab from './components/SettingsCaptchaTab.vue'
 import SettingsOrderEmailTemplateTab from './components/SettingsOrderEmailTemplateTab.vue'
 import SettingsNavigationTab from './components/SettingsNavigationTab.vue'
 
+/** MediaPicker 通过 defineExpose({ openPicker }) 暴露；与 InstanceType 交叉，避免 vue-tsc 未合并 expose 时误报缺少方法 */
+type SiteIconPickerInstance = InstanceType<typeof MediaPicker> & { openPicker: () => void }
+
 const { t } = useI18n()
 const loading = ref(false)
 const smtpTabRef = ref<InstanceType<typeof SettingsSMTPTab>>()
 const captchaTabRef = ref<InstanceType<typeof SettingsCaptchaTab>>()
 const orderEmailTemplateTabRef = ref<InstanceType<typeof SettingsOrderEmailTemplateTab>>()
 const navigationTabRef = ref<InstanceType<typeof SettingsNavigationTab>>()
-const siteIconPickerRef = ref<InstanceType<typeof MediaPicker> | null>(null)
+const siteIconPickerRef = ref<SiteIconPickerInstance | null>(null)
 const supportedLanguages = ['zh-CN', 'zh-TW', 'en-US'] as const
 type SupportedLanguage = (typeof supportedLanguages)[number]
 type SiteScriptPosition = 'head' | 'body_end'
@@ -311,8 +314,54 @@ const walletForm = reactive({
   recharge_channel_ids: [] as number[],
   wallet_only_payment: false,
 })
-const walletPaymentChannels = ref<Array<{ id: number; name: string; is_active?: boolean }>>([])
+const walletPaymentChannels = ref<AdminPaymentChannel[]>([])
 const walletSaving = ref(false)
+
+const toggleWalletRechargeChannel = (channelId: number) => {
+  const idx = walletForm.recharge_channel_ids.indexOf(channelId)
+  if (idx >= 0) {
+    walletForm.recharge_channel_ids.splice(idx, 1)
+  } else {
+    walletForm.recharge_channel_ids.push(channelId)
+  }
+}
+
+const loadWalletConfig = async () => {
+  try {
+    const res = await adminAPI.getSettings({ key: 'wallet_config' })
+    const data = res.data?.data
+    if (data && Array.isArray(data.recharge_channel_ids)) {
+      walletForm.recharge_channel_ids = data.recharge_channel_ids.filter((id: unknown) => typeof id === 'number' && id > 0)
+    } else {
+      walletForm.recharge_channel_ids = []
+    }
+    walletForm.wallet_only_payment = !!data?.wallet_only_payment
+  } catch {
+    walletForm.recharge_channel_ids = []
+    walletForm.wallet_only_payment = false
+  }
+}
+
+const loadWalletPaymentChannels = async () => {
+  try {
+    const res = await adminAPI.getPaymentChannels({ page: 1, page_size: 200 })
+    walletPaymentChannels.value = (res.data?.data ?? []).filter((ch: AdminPaymentChannel) => ch.is_active)
+  } catch {
+    walletPaymentChannels.value = []
+  }
+}
+
+const saveWalletConfig = async () => {
+  walletSaving.value = true
+  try {
+    await adminAPI.updateSettings({ key: 'wallet_config', value: { recharge_channel_ids: walletForm.recharge_channel_ids, wallet_only_payment: walletForm.wallet_only_payment } } as any)
+    notifySuccess(t('admin.settings.saved'))
+  } catch (err: any) {
+    notifyError(err?.message || t('admin.settings.saveFailed'))
+  } finally {
+    walletSaving.value = false
+  }
+}
 
 const getCurrentLangName = () => {
   return languages.value.find((item) => item.code === currentLang.value)?.name || t('admin.common.lang.zhCN')
@@ -426,7 +475,8 @@ const fetchSettings = async () => {
 
       const rawTemplateMode = String(data.template_mode || 'card').trim()
       form.template_mode = rawTemplateMode === 'list' ? 'list' : 'card'
-      telegramForm.user_url_telegram_app = data.user_url_telegram_app === true
+
+      telegramForm.user_url_telegram_app = !!data.user_url_telegram_app
     }
 
     if (orderRes.data && orderRes.data.data) {
@@ -520,7 +570,7 @@ const fetchSettings = async () => {
     if (accessRes.data && accessRes.data.data) {
       const accessData = accessRes.data.data as Record<string, unknown>
       accessForm.require_login = accessData.require_login === true
-      accessForm.enable_guest_orders = accessData.enable_guest_orders === true
+      accessForm.enable_guest_orders = !!accessData.enable_guest_orders
     }
 
     if (orderEmailTmplRes.data && orderEmailTmplRes.data.data) {
@@ -566,57 +616,41 @@ const saveRegistrationSettings = async () => {
   })
 }
 
-const saveSiteSettings = async () => {
-  const payload = {
+const updateSiteConfig = async (partial: Record<string, unknown>) => {
+  const current = await adminAPI.getSettings({ key: 'site_config' })
+  const currentValue = (current.data?.data ?? {}) as Record<string, unknown>
+
+  await adminAPI.updateSettings({
     key: 'site_config',
     value: {
-      brand: form.brand,
-      currency: String(form.currency || 'CNY').trim().toUpperCase(),
-      contact: form.contact,
-      seo: form.seo,
-      about: form.about,
-      legal: form.legal,
-      scripts: form.scripts,
-      footer_links: form.footer_links,
-      template_mode: form.template_mode,
+      ...currentValue,
+      ...partial,
     },
-  }
-  await adminAPI.updateSettings(payload)
+  })
+}
+
+const saveSiteSettings = async () => {
+  await updateSiteConfig({
+    brand: form.brand,
+    currency: String(form.currency || 'CNY').trim().toUpperCase(),
+    contact: form.contact,
+    seo: form.seo,
+    about: form.about,
+    legal: form.legal,
+    scripts: form.scripts,
+    footer_links: form.footer_links,
+    template_mode: form.template_mode,
+  })
   applySiteIcon(form.brand.site_icon)
 }
 
-const toggleWalletRechargeChannel = (channelId: number) => {
-  const idx = walletForm.recharge_channel_ids.indexOf(channelId)
-  if (idx >= 0) {
-    walletForm.recharge_channel_ids.splice(idx, 1)
-  } else {
-    walletForm.recharge_channel_ids.push(channelId)
-  }
+const openSiteIconPicker = () => {
+  siteIconPickerRef.value?.openPicker?.()
 }
 
-const loadWalletConfig = async () => {
-  try {
-    const res = await adminAPI.getSettings({ key: 'wallet_config' })
-    const data = res.data?.data
-    if (data && Array.isArray(data.recharge_channel_ids)) {
-      walletForm.recharge_channel_ids = data.recharge_channel_ids.filter((id: unknown) => typeof id === 'number' && id > 0)
-    } else {
-      walletForm.recharge_channel_ids = []
-    }
-    walletForm.wallet_only_payment = !!data?.wallet_only_payment
-  } catch {
-    walletForm.recharge_channel_ids = []
-    walletForm.wallet_only_payment = false
-  }
-}
-
-const loadWalletPaymentChannels = async () => {
-  try {
-    const res = await adminAPI.getPaymentChannels({ page: 1, page_size: 200 })
-    walletPaymentChannels.value = (res.data?.data ?? []).filter((ch: { is_active?: boolean }) => ch.is_active)
-  } catch {
-    walletPaymentChannels.value = []
-  }
+const clearSiteIcon = () => {
+  form.brand.site_icon = ''
+  applySiteIcon('')
 }
 
 const saveOrderSettings = async () => {
@@ -690,19 +724,6 @@ const saveTelegramAuthSettings = async () => {
   telegramForm.has_bot_token = !!data?.has_bot_token || telegramForm.has_bot_token
 }
 
-const updateSiteConfig = async (partial: Record<string, unknown>) => {
-  const current = await adminAPI.getSettings({ key: 'site_config' })
-  const currentValue = (current.data?.data ?? {}) as Record<string, unknown>
-
-  await adminAPI.updateSettings({
-    key: 'site_config',
-    value: {
-      ...currentValue,
-      ...partial,
-    },
-  })
-}
-
 const saveSiteUserSettings = async () => {
   await updateSiteConfig({
     user_url_telegram_app: telegramForm.user_url_telegram_app,
@@ -739,33 +760,15 @@ const saveDashboardSettings = async () => {
 }
 
 const saveAccessSettings = async () => {
-  await adminAPI.updateSettings({
+  const payload = {
     key: 'access_config',
     value: {
       require_login: accessForm.require_login,
       enable_guest_orders: accessForm.enable_guest_orders,
     },
-  })
-}
-
-const saveWalletConfig = async () => {
-  walletSaving.value = true
-  try {
-    await adminAPI.updateSettings({
-      key: 'wallet_config',
-      value: {
-        recharge_channel_ids: walletForm.recharge_channel_ids,
-        wallet_only_payment: walletForm.wallet_only_payment,
-      },
-    })
-    notifySuccess(t('admin.settings.alerts.saveSuccess'))
-  } catch (err) {
-    notifyErrorIfNeeded(err, t('admin.settings.alerts.saveFailed'))
-  } finally {
-    walletSaving.value = false
   }
+  await adminAPI.updateSettings(payload)
 }
-
 const saveSettings = async () => {
   if (currentTab.value === 'smtp') {
     await smtpTabRef.value?.save()
@@ -790,8 +793,6 @@ const saveSettings = async () => {
       await saveSiteUserSettings()
     } else if (currentTab.value === 'dashboard') {
       await saveDashboardSettings()
-    } else if (currentTab.value === 'wallet') {
-      await saveWalletConfig()
     } else if (currentTab.value === 'access') {
       await saveAccessSettings()
     } else {
@@ -813,19 +814,10 @@ onMounted(() => {
 
 watch(currentTab, (newTab) => {
   if (newTab === 'wallet' && walletPaymentChannels.value.length === 0) {
-    void loadWalletPaymentChannels()
-    void loadWalletConfig()
+    loadWalletPaymentChannels()
+    loadWalletConfig()
   }
 })
-
-const openSiteIconPicker = () => {
-  siteIconPickerRef.value?.open?.()
-}
-
-const clearSiteIcon = () => {
-  form.brand.site_icon = ''
-  applySiteIcon('')
-}
 </script>
 
 <template>
@@ -1103,7 +1095,7 @@ const clearSiteIcon = () => {
       </div>
       </TabsContent>
 
-    <div v-show="currentTab === 'access'" class="space-y-6">
+      <TabsContent value="access" :forceMount="true" v-show="currentTab === 'access'" class="space-y-6 mt-0">
       <div class="rounded-xl border border-border bg-card">
         <div class="border-b border-border bg-muted/40 px-6 py-4">
           <h2 class="text-lg font-semibold">{{ t('admin.settings.access.title') }}</h2>
@@ -1114,32 +1106,23 @@ const clearSiteIcon = () => {
           <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
             <input id="require-login" v-model="accessForm.require_login" type="checkbox" class="h-4 w-4 accent-primary" />
             <div class="flex-1">
-              <label for="require-login" class="block text-sm font-medium">{{ t('admin.settings.access.requireLogin') }}</label>
-              <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.access.requireLoginHint') }}</p>
+              <label for="require-login" class="text-sm font-medium block">{{ t('admin.settings.access.requireLogin') }}</label>
+              <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.access.requireLoginHint') }}</p>
             </div>
           </div>
 
-          <div
-            class="flex flex-col gap-3 rounded-lg border px-4 py-3"
-            :class="accessForm.require_login ? 'border-muted-foreground/20 bg-muted/10 opacity-50' : 'border-border bg-muted/20'"
-          >
-            <div class="sm:flex sm:items-center">
-              <input
-                id="enable-guest-orders"
-                v-model="accessForm.enable_guest_orders"
-                type="checkbox"
-                class="h-4 w-4 accent-primary"
-                :disabled="accessForm.require_login"
-              />
-              <div class="ml-3 flex-1">
-                <label for="enable-guest-orders" class="block text-sm font-medium">{{ t('admin.settings.access.enableGuestOrders') }}</label>
-                <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.access.enableGuestOrdersHint') }}</p>
+          <div class="flex flex-col gap-3 rounded-lg border" :class="accessForm.require_login ? 'border-muted-foreground/20 bg-muted/10 opacity-50 cursor-not-allowed' : 'border-border bg-muted/20'">
+            <div class="px-4 py-3 sm:flex sm:items-center">
+              <input id="enable-guest-orders" v-model="accessForm.enable_guest_orders" type="checkbox" class="h-4 w-4 accent-primary" :disabled="accessForm.require_login" />
+              <div class="flex-1 ml-3">
+                <label for="enable-guest-orders" class="text-sm font-medium block" :class="accessForm.require_login ? 'text-muted-foreground' : ''">{{ t('admin.settings.access.enableGuestOrders') }}</label>
+                <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.access.enableGuestOrdersHint') }}</p>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </TabsContent>
 
       <!-- Template Mode Tab -->
       <TabsContent value="template" :forceMount="true" v-show="currentTab === 'template'" class="space-y-6 mt-0">
@@ -1376,8 +1359,8 @@ const clearSiteIcon = () => {
               <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
                 <input id="telegram-user-whitelist-enabled" v-model="telegramForm.telegram_user_whitelist_enabled" type="checkbox" class="h-4 w-4 accent-primary" />
                 <div class="flex-1">
-                  <label for="telegram-user-whitelist-enabled" class="block text-sm font-medium">{{ t('admin.settings.telegram.telegramUserWhitelistEnabled') }}</label>
-                  <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.telegram.telegramUserWhitelistEnabledHint') }}</p>
+                  <label for="telegram-user-whitelist-enabled" class="text-sm font-medium block">{{ t('admin.settings.telegram.telegramUserWhitelistEnabled') }}</label>
+                  <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.telegram.telegramUserWhitelistEnabledHint') }}</p>
                 </div>
               </div>
             </div>
@@ -1398,12 +1381,13 @@ const clearSiteIcon = () => {
             </div>
           </div>
 
-          <div class="mt-6 border-t border-border pt-6">
+          <!-- User URL Telegram App Only -->
+          <div class="border-t border-border pt-6 mt-6">
             <div class="flex flex-col gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center">
               <input id="user-url-telegram-app" v-model="telegramForm.user_url_telegram_app" type="checkbox" class="h-4 w-4 accent-primary" />
               <div class="flex-1">
-                <label for="user-url-telegram-app" class="block text-sm font-medium">{{ t('admin.settings.telegram.userURLTelegramAppOnly') }}</label>
-                <p class="mt-1 text-xs text-muted-foreground">{{ t('admin.settings.telegram.userURLTelegramAppOnlyHint') }}</p>
+                <label for="user-url-telegram-app" class="text-sm font-medium block">{{ t('admin.settings.telegram.userURLTelegramAppOnly') }}</label>
+                <p class="text-xs text-muted-foreground mt-1">{{ t('admin.settings.telegram.userURLTelegramAppOnlyHint') }}</p>
               </div>
             </div>
           </div>
@@ -1468,7 +1452,7 @@ const clearSiteIcon = () => {
       </div>
       </TabsContent>
 
-    <TabsContent value="wallet" :forceMount="true" v-show="currentTab === 'wallet'" class="space-y-6 mt-0">
+      <TabsContent value="wallet" :forceMount="true" v-show="currentTab === 'wallet'" class="space-y-6 mt-0">
       <div class="rounded-xl border border-border bg-card">
         <div class="border-b border-border bg-muted/40 px-6 py-4">
           <h2 class="text-lg font-semibold">{{ t('admin.settings.wallet.title') }}</h2>
@@ -1478,19 +1462,14 @@ const clearSiteIcon = () => {
           <div class="flex items-center justify-between">
             <div>
               <label for="wallet-only-payment" class="text-sm font-medium">{{ t('admin.settings.wallet.walletOnlyPayment') }}</label>
-              <p class="mt-0.5 text-xs text-muted-foreground">{{ t('admin.settings.wallet.walletOnlyPaymentTip') }}</p>
+              <p class="text-xs text-muted-foreground mt-0.5">{{ t('admin.settings.wallet.walletOnlyPaymentTip') }}</p>
             </div>
             <input id="wallet-only-payment" v-model="walletForm.wallet_only_payment" type="checkbox" class="h-4 w-4 accent-primary" />
           </div>
           <div class="border-t border-border pt-4">
-            <label class="mb-2 block text-xs font-medium text-muted-foreground">{{ t('admin.settings.wallet.rechargeChannels') }}</label>
+            <label class="block text-xs font-medium text-muted-foreground mb-2">{{ t('admin.settings.wallet.rechargeChannels') }}</label>
             <div v-if="walletPaymentChannels.length > 0" class="flex flex-wrap gap-2">
-              <label
-                v-for="ch in walletPaymentChannels"
-                :key="ch.id"
-                class="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs"
-                :class="walletForm.recharge_channel_ids.includes(ch.id) ? 'border-primary bg-primary/10 text-primary' : 'text-muted-foreground hover:border-primary/40'"
-              >
+              <label v-for="ch in walletPaymentChannels" :key="ch.id" class="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs cursor-pointer select-none" :class="walletForm.recharge_channel_ids.includes(ch.id) ? 'bg-primary/10 border-primary text-primary' : 'text-muted-foreground hover:border-primary/40'">
                 <input type="checkbox" :checked="walletForm.recharge_channel_ids.includes(ch.id)" class="h-3.5 w-3.5 accent-primary" @change="toggleWalletRechargeChannel(ch.id)" />
                 {{ ch.name }}
               </label>
@@ -1506,6 +1485,6 @@ const clearSiteIcon = () => {
         </div>
       </div>
     </TabsContent>
-  </Tabs>
+    </Tabs>
   </div>
 </template>
